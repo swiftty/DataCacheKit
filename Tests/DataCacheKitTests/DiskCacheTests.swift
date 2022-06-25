@@ -16,11 +16,21 @@ func yield(until condition: @autoclosure () async -> Bool, limit: Int = 500) asy
 
 final class DiskCacheTests: XCTestCase {
     private var tmpDir: URL!
+    private var numberOfItems: Int {
+        (try? FileManager.default.contentsOfDirectory(atPath: tmpDir.path).count) ?? 0
+    }
+    private func cacheOptions<T: CustomStringConvertible>() -> DiskCache<T>.Options {
+        var options = DiskCache<T>.Options.default()
+        options.path = tmpDir
+        options.logger = .init(.default)
+        return options
+    }
 
     override func setUp() async throws {
         try await super.setUp()
         tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         print(tmpDir.absoluteString)
+        XCTAssertEqual(numberOfItems, 0)
     }
 
     override func tearDown() async throws {
@@ -31,17 +41,8 @@ final class DiskCacheTests: XCTestCase {
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreData() async {
         let clock = ManualClock()
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
 
-        var numberOfItems: Int {
-            (try? FileManager.default.contentsOfDirectory(atPath: tmpDir.path).count) ?? 0
-        }
-        var options = DiskCache<String>.Options.default()
-        options.path = tmpDir
-        options.logger = .init(.default)
-        let cache = DiskCache<String>(options: options, clock: clock)
-
-
-        XCTAssertEqual(numberOfItems, 0)
         await cache.storeData(Data(), for: "empty").value
 
         do {
@@ -86,5 +87,30 @@ final class DiskCacheTests: XCTestCase {
         } catch {
             XCTFail("\(error)")
         }
+    }
+
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
+    func testStoreDataMultiple() async {
+        let clock = ManualClock()
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
+
+        cache.storeData(Data([1]), for: "item0")
+        cache.storeData(Data([1, 2]), for: "item1")
+
+        await Task.yield()
+
+        do {
+            let count = await cache.staging.changes.count
+            XCTAssertEqual(count, 2)
+        }
+
+        clock.advance(by: .milliseconds(1000))
+
+        do {
+            let result = await yield(until: await cache.staging.changes.isEmpty)
+            XCTAssertTrue(result)
+        }
+
+        XCTAssertEqual(numberOfItems, 2)
     }
 }
