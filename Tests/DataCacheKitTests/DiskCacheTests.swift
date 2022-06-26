@@ -125,6 +125,15 @@ final class DiskCacheTests: XCTestCase {
         await cache.removeData(for: "item0").value
 
         do {
+            let data0 = try await cache.cachedData(for: "item0")
+            let data1 = try await cache.cachedData(for: "item1")
+            XCTAssertNil(data0)
+            XCTAssertEqual(data1, Data([1, 2]))
+        } catch {
+            XCTFail("\(error)")
+        }
+
+        do {
             cache.options.logger.debug("check staging layers")
             let count = await cache.staging.stages.count
             XCTAssertEqual(count, 2)

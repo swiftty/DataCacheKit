@@ -361,7 +361,7 @@ struct Staging<Key: Hashable & Sendable> {
     private var changeID = IDGenerator()
 
     func changes(for key: Key) -> Change? {
-        for stage in stages {
+        for stage in stages.reversed() {
             if let change = stage.changes[key] {
                 return change
             }
