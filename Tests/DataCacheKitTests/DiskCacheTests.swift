@@ -2,7 +2,7 @@ import XCTest
 @testable import DataCacheKit
 
 @discardableResult
-func yield(until condition: @autoclosure () async -> Bool, limit: Int = 1000) async -> Bool {
+func yield(until condition: @autoclosure () async -> Bool, limit: Int = 10000) async -> Bool {
     var limit = limit
     while limit > 0 {
         limit -= 1
@@ -112,5 +112,34 @@ final class DiskCacheTests: XCTestCase {
         }
 
         XCTAssertEqual(numberOfItems, 2)
+    }
+
+
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
+    func testRemoveData() async {
+        let clock = ManualClock()
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
+
+        cache.storeData(Data([1]), for: "item0")
+        cache.storeData(Data([1, 2]), for: "item1")
+        await cache.removeData(for: "item0").value
+
+        do {
+            cache.options.logger.debug("check staging layers")
+            let count = await cache.staging.stages.count
+            XCTAssertEqual(count, 2)
+
+            let change0 = await cache.staging.stages.last?.changes["item0"]?.operation
+            XCTAssertEqual(change0, .remove)
+        }
+
+        clock.advance(by: .milliseconds(1000))
+
+        do {
+            let result = await yield(until: await cache.staging.stages.isEmpty)
+            XCTAssertTrue(result)
+        }
+
+        XCTAssertEqual(numberOfItems, 1)
     }
 }
