@@ -2,14 +2,14 @@ import XCTest
 @testable import DataCacheKit
 
 @discardableResult
-func yield(until condition: @autoclosure () async -> Bool, limit: Int = 500) async -> Bool {
+func yield(until condition: @autoclosure () async -> Bool, limit: Int = 1000) async -> Bool {
     var limit = limit
     while limit > 0 {
         limit -= 1
+        await Task.yield()
         if await condition() {
             return true
         }
-        await Task.yield()
     }
     return false
 }
@@ -22,6 +22,7 @@ final class DiskCacheTests: XCTestCase {
     private func cacheOptions<T: CustomStringConvertible>() -> DiskCache<T>.Options {
         var options = DiskCache<T>.Options.default()
         options.path = tmpDir
+        options.filename = { $0.description }
         options.logger = .init(.default)
         return options
     }
@@ -47,7 +48,7 @@ final class DiskCacheTests: XCTestCase {
 
         do {
             // load from staging (memory)
-            let change = await cache.staging.changes["empty"]
+            let change = await cache.staging.changes(for: "empty")
             XCTAssertNotNil(change)
 
             let url = try XCTUnwrap(cache.url(for: "empty"))
@@ -62,7 +63,7 @@ final class DiskCacheTests: XCTestCase {
         clock.advance(by: .milliseconds(500))
 
         do {
-            let result = await yield(until: await cache.staging.changes["empty"] == nil)
+            let result = await yield(until: await cache.staging.changes(for: "empty") == nil)
             XCTAssertFalse(result)
         }
 
@@ -71,7 +72,7 @@ final class DiskCacheTests: XCTestCase {
         clock.advance(by: .milliseconds(500))
 
         do {
-            let result = await yield(until: await cache.staging.changes["empty"] == nil)
+            let result = await yield(until: await cache.staging.changes(for: "empty") == nil)
             XCTAssertTrue(result)
         }
 
@@ -95,19 +96,18 @@ final class DiskCacheTests: XCTestCase {
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
 
         cache.storeData(Data([1]), for: "item0")
-        cache.storeData(Data([1, 2]), for: "item1")
-
-        await Task.yield()
+        await cache.storeData(Data([1, 2]), for: "item1").value
 
         do {
-            let count = await cache.staging.changes.count
+            cache.options.logger.debug("check staging items")
+            let count = await cache.staging.stages.first?.changes.count
             XCTAssertEqual(count, 2)
         }
 
         clock.advance(by: .milliseconds(1000))
 
         do {
-            let result = await yield(until: await cache.staging.changes.isEmpty)
+            let result = await yield(until: await cache.staging.stages.isEmpty)
             XCTAssertTrue(result)
         }
 

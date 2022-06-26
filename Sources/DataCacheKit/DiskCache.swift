@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 @globalActor
 public struct DiskCacheActor {
@@ -73,7 +74,7 @@ public final class DiskCache<Key: Hashable & Sendable> {
         await Task.yield()
 
         let task = Task<Data?, Error> { @DiskCacheActor in
-            if let change = staging.changes[key] {
+            if let change = staging.changes(for: key) {
                 if change.deleted {
                     return nil
                 }
@@ -122,6 +123,7 @@ public final class DiskCache<Key: Hashable & Sendable> {
     // MARK: -
     @DiskCacheActor
     private func _storeData(_ data: Data, for key: Key) async {
+        options.logger.debug("store data: \(data) for \(String(describing: key))")
         await waitForTask(for: key)
         staging.add(data: data, for: key)
         setNeedsFlushChanges()
@@ -129,6 +131,7 @@ public final class DiskCache<Key: Hashable & Sendable> {
 
     @DiskCacheActor
     private func _removeData(for key: Key) async {
+        options.logger.debug("remove data for \(String(describing: key))")
         await waitForTask(for: key)
         staging.remove(for: key)
         setNeedsFlushChanges()
@@ -154,6 +157,8 @@ extension DiskCache {
         guard !isFlushNeeded else { return }
         isFlushNeeded = true
 
+        options.logger.debug("flush scheduled")
+
         let oldTask = flushingTask
         flushingTask = Task {
             try await clock.sleep(until: 1)
@@ -170,6 +175,8 @@ extension DiskCache {
 
         guard isFlushNeeded else { return }
         isFlushNeeded = false
+
+        options.logger.debug("flush starting")
 
         func _peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, Error> {
             let task = Task {
@@ -203,14 +210,14 @@ extension DiskCache {
             return task
         }
 
+        guard let stage = staging.stages.first else { return }
         let logger = options.logger
-        await withTaskGroup(of: Void.self) { group in
+        let changes = await withTaskGroup(of: Void.self, returning: [Staging<Key>.Change].self) { group in
             var deleted = false
             var flushedChanges: [Staging<Key>.Change] = []
             var deletedChanges: [Staging<Key>.Change] = []
 
-            let currentStaging = staging
-            for change in currentStaging.changes.values {
+            for change in stage.changes.values {
                 if change.deleted {
                     deleted = deleted || change.deleted
                     deletedChanges.append(change)
@@ -241,9 +248,11 @@ extension DiskCache {
                 } catch {}
             }
 
-            for change in flushedChanges {
-                staging.flushed(change)
-            }
+            return flushedChanges
+        }
+
+        for change in changes {
+            staging.flushed(change, with: options.logger)
         }
     }
 
@@ -255,9 +264,11 @@ extension DiskCache {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             }
 
+            options.logger.debug("add data: \(data) to \(url.lastPathComponent)")
             try data.write(to: url)
 
         case .remove:
+            options.logger.debug("remove data at \(url.lastPathComponent)")
             try FileManager.default.removeItem(at: url)
         }
     }
@@ -300,38 +311,81 @@ struct Staging<Key: Hashable & Sendable> {
         var deleted = false
     }
     @DiskCacheActor
-    struct ChangeRemoveAll {
-        let id: Int
-    }
-    @DiskCacheActor
-    enum Operation {
+    enum Operation: Equatable {
         case add(Data)
         case remove
     }
+    @DiskCacheActor
+    struct Stage {
+        var changes: [Key: Change]
+    }
 
-    private(set) var changes: [Key: Change] = [:]
+    private(set) var stages: [Stage] = []
     private var nextID = 0
+
+    func changes(for key: Key) -> Change? {
+        for stage in stages {
+            if let change = stage.changes[key] {
+                return change
+            }
+        }
+        return nil
+    }
 
     mutating func add(data: Data, for key: Key) {
         nextID &+= 1
-        changes[key] = Change(key: key, id: nextID, operation: .add(data))
+        let change = Change(key: key, id: nextID, operation: .add(data))
+        if checkConflicts(on: key) {
+            stages.append(Stage(changes: [key: change]))
+        } else {
+            stages[stages.count - 1].changes[key] = change
+        }
     }
 
     mutating func remove(for key: Key) {
         nextID &+= 1
-        changes[key] = Change(key: key, id: nextID, operation: .remove)
+        let change = Change(key: key, id: nextID, operation: .remove)
+        if checkConflicts(on: key) {
+            stages.append(Stage(changes: [key: change]))
+        } else {
+            stages[stages.count - 1].changes[key] = change
+        }
     }
 
     mutating func removeAll() {
-        nextID &+= 1
-        for key in changes.keys {
-            changes[key]?.deleted = true
+        var keys: Set<Key> = []
+        for stage in stages {
+            for change in stage.changes.values {
+                keys.insert(change.key)
+            }
+        }
+        var stage = Stage(changes: [:])
+        for key in keys {
+            nextID &+= 1
+            stage.changes[key] = Change(key: key, id: nextID, operation: .remove, deleted: true)
+        }
+        stages.append(stage)
+    }
+
+    mutating func flushed(_ change: Change, with logger: Logger) {
+        for (i, var stage) in stages.enumerated() {
+            guard let c = stage.changes[change.key], c.id == change.id else { continue }
+            stage.changes.removeValue(forKey: c.key)
+            if stage.changes.isEmpty {
+                stages.remove(at: i)
+                logger.debug("flushed change \(String(describing: c.key)), at \(i), removed")
+            } else {
+                stages[i] = stage
+                logger.debug("flushed change \(String(describing: c.key)), at \(i)")
+            }
+            return
         }
     }
 
-    mutating func flushed(_ change: Change) {
-        if let c = changes[change.key], c.id == change.id {
-            changes.removeValue(forKey: c.key)
-        }
+    private func checkConflicts(on key: Key? = nil) -> Bool {
+        guard let stage = stages.last else { return true }
+        if stage.changes.values.contains(where: \.deleted) { return true }
+        if let key, stage.changes.keys.contains(key) { return true }
+        return false
     }
 }
