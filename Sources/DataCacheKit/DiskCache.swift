@@ -1,3 +1,8 @@
+// The MIT License (MIT)
+//
+// This implementation is based on kean/Nuke's DataCache
+// https://github.com/kean/Nuke/blob/master/Sources/Core/Caching/DataCache.swift
+
 import Foundation
 import OSLog
 
@@ -27,12 +32,25 @@ public final class DiskCache<Key: Hashable & Sendable> {
 
     private let clock: _Clock
 
-    private lazy var path: () throws -> URL = {
-        let dir = self.options.path
+    private var path: URL {
+        get throws {
+            try _prepare()
+            return _path
+        }
+    }
+    private var _path: URL!
+
+    private lazy var _prepare: () throws -> Void = {
+        let dir = options.path
                 ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        _path = dir
+        Task {
+            await scheduleSweep(after: 10)
+        }
         return {
-            guard let dir else { throw CocoaError(.fileNoSuchFile) }
-            return dir
+            if dir == nil {
+                throw CocoaError(.fileNoSuchFile)
+            }
         }
     }()
 
@@ -49,6 +67,9 @@ public final class DiskCache<Key: Hashable & Sendable> {
     private var flushingTask: Task<Void, Error>?
 
     @DiskCacheActor
+    private var sweepingTask: Task<Void, Error>?
+
+    @DiskCacheActor
     private var isFlushNeeded = false
 
     @DiskCacheActor
@@ -61,16 +82,18 @@ public final class DiskCache<Key: Hashable & Sendable> {
         } else {
             self.clock = _Clock()
         }
+        try? _prepare()
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     init<C: _Concurrency.Clock>(options: Options, clock: C) where C.Instant.Duration == Duration {
         self.options = options
         self.clock = NewClock(clock)
+        try? _prepare()
     }
 
     public func prepare() throws {
-        _ = try path()
+        try _prepare()
     }
 
     public func cachedData(for key: Key) async throws -> Data? {
@@ -144,7 +167,7 @@ public final class DiskCache<Key: Hashable & Sendable> {
 
     public func url(for key: Key) -> URL? {
         guard let filename = options.filename(key) else { return nil }
-        return try? path().appendingPathComponent(filename, isDirectory: false)
+        return try? path.appendingPathComponent(filename, isDirectory: false)
     }
 
     // MARK: -
@@ -291,6 +314,7 @@ extension DiskCache {
         }
     }
 
+    @DiskCacheActor
     private func performChange(_ change: Staging<Key>.Change, with url: URL) async throws {
         switch change.operation {
         case .add(let data):
@@ -308,10 +332,100 @@ extension DiskCache {
         }
     }
 
+    @DiskCacheActor
     private func performChangeRemoveAll() async throws {
-        let dir = try path()
+        let dir = try path
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+}
+
+extension DiskCache {
+    @DiskCacheActor
+    private func scheduleSweep(after seconds: Int) {
+        options.logger.debug("sweep scheduled")
+        let oldTask = sweepingTask
+        sweepingTask = Task {
+            try await clock.sleep(until: seconds)
+            _ = await oldTask?.result
+            do {
+                try performSweep()
+            } catch {
+                options.logger.error("sweep error: \(String(describing: error))")
+            }
+            scheduleSweep(after: 30)
+        }
+    }
+
+    @DiskCacheActor
+    private func performSweep() throws {
+        var items = try contents(keys: [.contentAccessDateKey, .totalFileAllocatedSizeKey])
+        guard !items.isEmpty else { return }
+
+        var size = items.reduce(0) { $0 + ($1.meta.totalFileAllocatedSize ?? 0) }
+
+        guard size > options.sizeLimit else { return }
+
+        let sizeLimit = Int(Double(options.sizeLimit) * 0.7)
+        items = items.sorted(by: { lhs, rhs in
+            (lhs.meta.contentAccessDate ?? .distantPast) > (rhs.meta.contentAccessDate ?? .distantPast)
+        })
+
+        while sizeLimit > sizeLimit, let item = items.popLast() {
+            do {
+                try FileManager.default.removeItem(at: item.url)
+                size -= item.meta.totalFileAllocatedSize ?? 0
+            } catch {
+                options.logger.error("sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
+            }
+        }
+    }
+
+    private struct Entry {
+        let url: URL
+        let meta: URLResourceValues
+    }
+
+    @DiskCacheActor
+    private func contents(keys: [URLResourceKey] = []) throws -> [Entry] {
+        let urls = try FileManager.default
+            .contentsOfDirectory(at: path, includingPropertiesForKeys: keys, options: .skipsHiddenFiles)
+        let keys = Set(keys)
+        return urls.compactMap { url in
+            guard let meta = try? url.resourceValues(forKeys: keys) else { return nil }
+            return Entry(url: url, meta: meta)
+        }
+    }
+
+    /// The total number of items in the cache.
+    public var totalCount: Int {
+        get async throws {
+            try await contents().count
+        }
+    }
+
+    /// The total file size of items written on disk.
+    ///
+    /// Uses `URLResourceKey.fileSizeKey` to calculate the size of each entry.
+    /// The total allocated size (see `totalAllocatedSize`. on disk might
+    /// actually be bigger.
+    public var totalSize: Int {
+        get async throws {
+            try await contents(keys: [.fileSizeKey]).reduce(0) {
+                $0 + ($1.meta.fileSize ?? 0)
+            }
+        }
+    }
+
+    /// The total file allocated size of all the items written on disk.
+    ///
+    /// Uses `URLResourceKey.totalFileAllocatedSizeKey`.
+    public var totalAllocatedSize: Int {
+        get async throws {
+            try await contents(keys: [.totalFileAllocatedSizeKey]).reduce(0) {
+                $0 + ($1.meta.totalFileAllocatedSize ?? 0)
+            }
+        }
     }
 }
 
