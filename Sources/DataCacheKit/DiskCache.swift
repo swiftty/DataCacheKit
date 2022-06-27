@@ -64,10 +64,10 @@ public final class DiskCache<Key: Hashable & Sendable> {
     private var runningTasks: [Key: Task<Void, Error>] = [:]
 
     @DiskCacheActor
-    private var flushingTask: Task<Void, Error>?
+    private(set) var flushingTask: Task<Void, Error>?
 
     @DiskCacheActor
-    private var sweepingTask: Task<Void, Error>?
+    private(set) var sweepingTask: Task<Void, Error>?
 
     @DiskCacheActor
     private var isFlushNeeded = false
@@ -100,6 +100,8 @@ public final class DiskCache<Key: Hashable & Sendable> {
         await Task.yield()
 
         let task = Task<Data?, Error> { @DiskCacheActor in
+            _ = await queueingTask?.result
+
             if let change = staging.changes(for: key) {
                 if change.deleted {
                     return nil
@@ -174,7 +176,6 @@ public final class DiskCache<Key: Hashable & Sendable> {
     @DiskCacheActor
     private func _storeData(_ data: Data, for key: Key) async {
         options.logger.debug("store data: \(data) for \(String(describing: key))")
-        await waitForTask(for: key)
         staging.add(data: data, for: key)
         setNeedsFlushChanges()
     }
@@ -182,14 +183,13 @@ public final class DiskCache<Key: Hashable & Sendable> {
     @DiskCacheActor
     private func _removeData(for key: Key) async {
         options.logger.debug("remove data for \(String(describing: key))")
-        await waitForTask(for: key)
         staging.remove(for: key)
         setNeedsFlushChanges()
     }
 
     @DiskCacheActor
     private func _removeDataAll() async {
-        _ = await flushingTask?.result
+        options.logger.debug("remove data all")
         staging.removeAll()
         setNeedsFlushChanges()
     }
@@ -349,6 +349,7 @@ extension DiskCache {
             try await clock.sleep(until: seconds)
             _ = await oldTask?.result
             do {
+                options.logger.debug("sweep starting")
                 try performSweep()
             } catch {
                 options.logger.error("sweep error: \(String(describing: error))")
@@ -371,10 +372,11 @@ extension DiskCache {
             (lhs.meta.contentAccessDate ?? .distantPast) > (rhs.meta.contentAccessDate ?? .distantPast)
         })
 
-        while sizeLimit > sizeLimit, let item = items.popLast() {
+        while size > sizeLimit, let item = items.popLast() {
             do {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
+                options.logger.debug("sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
             } catch {
                 options.logger.error("sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
             }
@@ -388,8 +390,13 @@ extension DiskCache {
 
     @DiskCacheActor
     private func contents(keys: [URLResourceKey] = []) throws -> [Entry] {
-        let urls = try FileManager.default
-            .contentsOfDirectory(at: path, includingPropertiesForKeys: keys, options: .skipsHiddenFiles)
+        let urls: [URL]
+        do {
+            urls = try FileManager.default
+                .contentsOfDirectory(at: path, includingPropertiesForKeys: keys, options: .skipsHiddenFiles)
+        } catch CocoaError.fileReadNoSuchFile {
+            return []
+        }
         let keys = Set(keys)
         return urls.compactMap { url in
             guard let meta = try? url.resourceValues(forKeys: keys) else { return nil }

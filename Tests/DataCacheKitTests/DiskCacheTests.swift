@@ -151,4 +151,51 @@ final class DiskCacheTests: XCTestCase {
 
         XCTAssertEqual(numberOfItems, 1)
     }
+
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
+    func testSweep() async {
+        let allocationUnit = 4096
+
+        var options = cacheOptions() as DiskCache<String>.Options
+        options.sizeLimit = 3 * allocationUnit - 1
+        let clock = ManualClock()
+        let cache = DiskCache<String>(options: options, clock: clock)
+
+        cache.storeData(Data([1]), for: "item0")
+        cache.storeData(Data([1, 2]), for: "item1")
+        await cache.storeData(Data([1, 2, 3]), for: "item2").value
+
+        do {
+            cache.options.logger.debug("check staging layers")
+            clock.advance(by: .milliseconds(1000))
+
+            let data2 = try? await cache.cachedData(for: "item2")
+            XCTAssertEqual(data2, Data([1, 2, 3]))
+
+            try? await cache.flushingTask?.value
+
+            XCTAssertEqual(numberOfItems, 3)
+        }
+
+        do {
+            var item1 = tmpDir.appendingPathComponent("item1")
+            var resourceValues = URLResourceValues()
+            resourceValues.contentAccessDate = .distantPast
+            try item1.setResourceValues(resourceValues)
+
+            cache.options.logger.debug("check sweeping layers")
+            clock.advance(by: .seconds(10))
+
+            try? await cache.sweepingTask?.value
+
+            XCTAssertEqual(numberOfItems, 2)
+
+            let data0 = try? await cache.cachedData(for: "item0")
+            let data1 = try? await cache.cachedData(for: "item2")
+            XCTAssertEqual(data0, Data([1]))
+            XCTAssertEqual(data1, Data([1, 2, 3]))
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
 }
