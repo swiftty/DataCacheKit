@@ -39,12 +39,15 @@ public final class Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: C
 
         guard let data = try await onDisk.value(for: key) else { return nil }
 
-        if let value = data as? Value {
-            return value
-        }
+        let value: Value = try {
+            if let v = data as? Value { return v }
 
-        let decoder = JSONDecoder()
-        return try decoder.decode(Value.self, from: data)
+            let decoder = JSONDecoder()
+            return try decoder.decode(Value.self, from: data)
+        }()
+
+        onMemery.store(value, for: key)
+        return value
     }
 
     @discardableResult
