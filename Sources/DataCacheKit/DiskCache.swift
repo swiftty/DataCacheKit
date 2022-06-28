@@ -14,12 +14,16 @@ public struct DiskCacheActor {
 }
 
 // MARK: - DiskCache
-public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
+public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
+    public typealias Key = Key
+    public typealias Value = Data
+
     public let options: Options
+    public let logger: Logger
 
     public subscript (key: Key) -> Data? {
         get async throws {
-            try await cachedData(for: key)
+            try await value(for: key)
         }
 //        set {
 //            if let newValue {
@@ -87,20 +91,22 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
         return "[\(path.lastPathComponent)] "
     }
 
-    public init(options: Options) {
+    public init(options: Options, logger: Logger = .init(.disabled)) {
         self.options = options
         if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
             self.clock = NewClock(.suspending)
         } else {
             self.clock = _Clock()
         }
+        self.logger = logger
         try? _prepare()
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    init<C: _Concurrency.Clock>(options: Options, clock: C) where C.Instant.Duration == Duration {
+    init<C: _Concurrency.Clock>(options: Options, clock: C, logger: Logger = .init(.disabled)) where C.Instant.Duration == Duration {
         self.options = options
         self.clock = NewClock(clock)
+        self.logger = logger
         try? _prepare()
     }
 
@@ -108,7 +114,7 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
         try _prepare()
     }
 
-    public func cachedData(for key: Key) async throws -> Data? {
+    public func value(for key: Key) async throws -> Data? {
         await Task.yield()
 
         let task = Task<Data?, Error> { @DiskCacheActor in
@@ -141,7 +147,7 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     }
 
     @discardableResult
-    public func storeData(_ data: Data, for key: Key) -> Task<Void, Never> {
+    public func store(_ data: Data, for key: Key) -> Task<Void, Never> {
         queueingLock.lock()
         defer { queueingLock.unlock() }
         let oldTask = queueingTask
@@ -154,7 +160,7 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     }
 
     @discardableResult
-    public func removeData(for key: Key) -> Task<Void, Never> {
+    public func remove(for key: Key) -> Task<Void, Never> {
         queueingLock.lock()
         defer { queueingLock.unlock() }
         let oldTask = queueingTask
@@ -167,7 +173,7 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     }
 
     @discardableResult
-    public func removeDataAll() -> Task<Void, Never> {
+    public func removeAll() -> Task<Void, Never> {
         queueingLock.lock()
         defer { queueingLock.unlock() }
         let oldTask = queueingTask
@@ -187,21 +193,21 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     // MARK: -
     @DiskCacheActor
     private func _storeData(_ data: Data, for key: Key) async {
-        options.logger.debug("\(self.logKey)store data: \(data) for \(String(describing: key))")
+        logger.debug("\(self.logKey)store data: \(data) for \(String(describing: key))")
         staging.add(data: data, for: key)
         setNeedsFlushChanges()
     }
 
     @DiskCacheActor
     private func _removeData(for key: Key) async {
-        options.logger.debug("\(self.logKey)remove data for \(String(describing: key))")
+        logger.debug("\(self.logKey)remove data for \(String(describing: key))")
         staging.remove(for: key)
         setNeedsFlushChanges()
     }
 
     @DiskCacheActor
     private func _removeDataAll() async {
-        options.logger.debug("\(self.logKey)remove data all")
+        logger.debug("\(self.logKey)remove data all")
         staging.removeAll()
         setNeedsFlushChanges()
     }
@@ -219,7 +225,7 @@ extension DiskCache {
         guard !isFlushNeeded else { return }
         isFlushNeeded = true
 
-        options.logger.debug("\(self.logKey)flush scheduled")
+        logger.debug("\(self.logKey)flush scheduled")
 
         let oldTask = flushingTask
         flushingTask = Task {
@@ -238,7 +244,7 @@ extension DiskCache {
         guard isFlushNeeded else { return }
         isFlushNeeded = false
 
-        options.logger.debug("\(self.logKey)flush starting")
+        logger.debug("\(self.logKey)flush starting")
         await _flushIfNeeded(numberOfAttempts: staging.stages.count)
     }
 
@@ -259,11 +265,7 @@ extension DiskCache {
         }
         func _performChangeRemoveAll(for changes: [Staging<Key>.Change]) -> Task<Void, Error> {
             let task = Task<Void, Error> {
-                do {
-                    try await performChangeRemoveAll()
-                } catch {
-                    logger.error("\(self.logKey)\(String(describing: error))")
-                }
+                try await performChangeRemoveAll()
             }
             for change in changes {
                 assert(runningTasks[change.key] == nil)
@@ -277,7 +279,7 @@ extension DiskCache {
         }
 
         guard numberOfAttempts > 0, let stage = staging.stages.first else { return }
-        let logger = options.logger
+        let logger = logger
         let changes = await withTaskGroup(of: Void.self, returning: [Staging<Key>.Change].self) { group in
             var deleted = false
             var flushedChanges: [Staging<Key>.Change] = []
@@ -311,14 +313,16 @@ extension DiskCache {
                 do {
                     try await task.value
                     flushedChanges.append(contentsOf: deletedChanges)
-                } catch {}
+                } catch {
+                    logger.error("\(self.logKey)\(String(describing: error))")
+                }
             }
 
             return flushedChanges
         }
 
         for change in changes {
-            staging.flushed(change, with: options.logger, logKey: self.logKey)
+            staging.flushed(change, with: logger, logKey: self.logKey)
         }
 
         if !staging.stages.isEmpty {
@@ -335,11 +339,11 @@ extension DiskCache {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             }
 
-            options.logger.debug("\(self.logKey)add data: \(data) to \(url.lastPathComponent)")
+            logger.debug("\(self.logKey)added data: \(data) to \(url.lastPathComponent)")
             try data.write(to: url)
 
         case .remove:
-            options.logger.debug("\(self.logKey)remove data at \(url.lastPathComponent)")
+            logger.debug("\(self.logKey)removed data at \(url.lastPathComponent)")
             try FileManager.default.removeItem(at: url)
         }
     }
@@ -355,16 +359,17 @@ extension DiskCache {
 extension DiskCache {
     @DiskCacheActor
     private func scheduleSweep(after seconds: Int) {
-        options.logger.debug("\(self.logKey)sweep scheduled")
+        logger.debug("\(self.logKey)sweep scheduled")
         let oldTask = sweepingTask
         sweepingTask = Task {
             try await clock.sleep(until: seconds)
             _ = await oldTask?.result
             do {
-                options.logger.debug("\(self.logKey)sweep starting")
+                logger.debug("\(self.logKey)sweep starting")
                 try performSweep()
+                logger.debug("\(self.logKey)sweep finished")
             } catch {
-                options.logger.error("\(self.logKey)sweep error: \(String(describing: error))")
+                logger.error("\(self.logKey)sweep error: \(String(describing: error))")
             }
             scheduleSweep(after: 30)
         }
@@ -388,9 +393,9 @@ extension DiskCache {
             do {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
-                options.logger.debug("\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
+                logger.debug("\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
             } catch {
-                options.logger.error("\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
+                logger.error("\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
             }
         }
     }
