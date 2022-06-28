@@ -43,7 +43,7 @@ final class DiskCacheTests: XCTestCase {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
 
-        await cache.storeData(Data(), for: "empty").value
+        await cache.store(Data(), for: "empty").value
 
         do {
             // load from staging (memory)
@@ -53,7 +53,7 @@ final class DiskCacheTests: XCTestCase {
             let url = try XCTUnwrap(cache.url(for: "empty"))
             XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
 
-            let data = try await cache.cachedData(for: "empty")
+            let data = try await cache.value(for: "empty")
             XCTAssertNotNil(data)
         } catch {
             XCTFail("\(error)")
@@ -82,7 +82,7 @@ final class DiskCacheTests: XCTestCase {
             let url = try XCTUnwrap(cache.url(for: "empty"))
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
 
-            let data = try await cache.cachedData(for: "empty")
+            let data = try await cache.value(for: "empty")
             XCTAssertNotNil(data)
         } catch {
             XCTFail("\(error)")
@@ -94,8 +94,8 @@ final class DiskCacheTests: XCTestCase {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
 
-        cache.storeData(Data([1]), for: "item0")
-        await cache.storeData(Data([1, 2]), for: "item1").value
+        cache.store(Data([1]), for: "item0")
+        await cache.store(Data([1, 2]), for: "item1").value
 
         do {
             cache.options.logger.debug("check staging items")
@@ -119,13 +119,13 @@ final class DiskCacheTests: XCTestCase {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
 
-        cache.storeData(Data([1]), for: "item0")
-        cache.storeData(Data([1, 2]), for: "item1")
-        await cache.removeData(for: "item0").value
+        cache.store(Data([1]), for: "item0")
+        cache.store(Data([1, 2]), for: "item1")
+        await cache.remove(for: "item0").value
 
         do {
-            let data0 = try await cache.cachedData(for: "item0")
-            let data1 = try await cache.cachedData(for: "item1")
+            let data0 = try await cache.value(for: "item0")
+            let data1 = try await cache.value(for: "item1")
             XCTAssertNil(data0)
             XCTAssertEqual(data1, Data([1, 2]))
         } catch {
@@ -160,15 +160,15 @@ final class DiskCacheTests: XCTestCase {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: options, clock: clock)
 
-        cache.storeData(Data([1]), for: "item0")
-        cache.storeData(Data([1, 2]), for: "item1")
-        await cache.storeData(Data([1, 2, 3]), for: "item2").value
+        cache.store(Data([1]), for: "item0")
+        cache.store(Data([1, 2]), for: "item1")
+        await cache.store(Data([1, 2, 3]), for: "item2").value
 
         do {
             cache.options.logger.debug("check staging layers")
             clock.advance(by: .milliseconds(1000))
 
-            let data2 = try? await cache.cachedData(for: "item2")
+            let data2 = try? await cache.value(for: "item2")
             XCTAssertEqual(data2, Data([1, 2, 3]))
 
             try? await cache.flushingTask?.value
@@ -189,8 +189,8 @@ final class DiskCacheTests: XCTestCase {
 
             XCTAssertEqual(numberOfItems, 2)
 
-            let data0 = try? await cache.cachedData(for: "item0")
-            let data1 = try? await cache.cachedData(for: "item2")
+            let data0 = try? await cache.value(for: "item0")
+            let data1 = try? await cache.value(for: "item2")
             XCTAssertEqual(data0, Data([1]))
             XCTAssertEqual(data1, Data([1, 2, 3]))
         } catch {
