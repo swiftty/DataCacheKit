@@ -22,7 +22,6 @@ final class DiskCacheTests: XCTestCase {
     private func cacheOptions<T: CustomStringConvertible>() -> DiskCache<T>.Options {
         var options = DiskCache<T>.Options.default(path: .custom(tmpDir))
         options.filename = { $0.description }
-        options.logger = .init(.default)
         return options
     }
 
@@ -41,7 +40,7 @@ final class DiskCacheTests: XCTestCase {
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreData() async {
         let clock = ManualClock()
-        let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
         await cache.store(Data(), for: "empty").value
 
@@ -92,13 +91,13 @@ final class DiskCacheTests: XCTestCase {
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreDataMultiple() async {
         let clock = ManualClock()
-        let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
         cache.store(Data([1]), for: "item0")
         await cache.store(Data([1, 2]), for: "item1").value
 
         do {
-            cache.options.logger.debug("check staging items")
+            cache.logger.debug("check staging items")
             let count = await cache.staging.stages.first?.changes.count
             XCTAssertEqual(count, 2)
         }
@@ -117,7 +116,7 @@ final class DiskCacheTests: XCTestCase {
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveData() async {
         let clock = ManualClock()
-        let cache = DiskCache<String>(options: cacheOptions(), clock: clock)
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
         cache.store(Data([1]), for: "item0")
         cache.store(Data([1, 2]), for: "item1")
@@ -133,7 +132,7 @@ final class DiskCacheTests: XCTestCase {
         }
 
         do {
-            cache.options.logger.debug("check staging layers")
+            cache.logger.debug("check staging layers")
             let count = await cache.staging.stages.count
             XCTAssertEqual(count, 2)
 
@@ -165,7 +164,7 @@ final class DiskCacheTests: XCTestCase {
         await cache.store(Data([1, 2, 3]), for: "item2").value
 
         do {
-            cache.options.logger.debug("check staging layers")
+            cache.logger.debug("check staging layers")
             clock.advance(by: .milliseconds(1000))
 
             let data2 = try? await cache.value(for: "item2")
@@ -182,7 +181,7 @@ final class DiskCacheTests: XCTestCase {
             resourceValues.contentAccessDate = .distantPast
             try item1.setResourceValues(resourceValues)
 
-            cache.options.logger.debug("check sweeping layers")
+            cache.logger.debug("check sweeping layers")
             clock.advance(by: .seconds(10))
 
             try? await cache.sweepingTask?.value

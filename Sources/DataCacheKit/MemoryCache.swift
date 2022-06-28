@@ -1,7 +1,9 @@
 import Foundation
+import OSLog
 
 public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching, @unchecked Sendable {
     public let options: Options
+    public let logger: Logger
 
     private let nsCache = NSCache<KeyWrapper<Key>, ValueWrapper<Value>>()
     private let queueingLock = NSLock()
@@ -13,8 +15,9 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
         }
     }
 
-    public init(options: Options) {
+    public init(options: Options, logger: Logger = .init(.disabled)) {
         self.options = options
+        self.logger = logger
         nsCache.countLimit = options.countLimit
         if let costLimit = options.costLimit {
             nsCache.totalCostLimit = costLimit

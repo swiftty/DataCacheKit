@@ -1,13 +1,11 @@
 import Foundation
 import CommonCrypto
-import OSLog
 
 extension DiskCache {
     public struct Options {
         public var sizeLimit: Int
         public var filename: @Sendable (Key) -> String?
         public var path: Path
-        public var logger: Logger
 
         public enum Path {
             case `default`(name: String)
@@ -25,13 +23,11 @@ extension DiskCache {
         public init(
             sizeLimit: Int,
             filename: @escaping @Sendable (Key) -> String?,
-            path: Path,
-            logger: Logger = .init(.disabled)
+            path: Path
         ) {
             self.sizeLimit = sizeLimit
             self.filename = filename
             self.path = path
-            self.logger = logger
         }
 
         @Sendable
