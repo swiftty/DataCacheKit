@@ -81,6 +81,12 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     @DiskCacheActor
     private var isFlushScheduled = false
 
+    @DiskCacheActor
+    private var logKey: String {
+        guard let path = try? path else { return "" }
+        return "[\(path.lastPathComponent)] "
+    }
+
     public init(options: Options) {
         self.options = options
         if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
@@ -181,21 +187,21 @@ public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     // MARK: -
     @DiskCacheActor
     private func _storeData(_ data: Data, for key: Key) async {
-        options.logger.debug("store data: \(data) for \(String(describing: key))")
+        options.logger.debug("\(self.logKey)store data: \(data) for \(String(describing: key))")
         staging.add(data: data, for: key)
         setNeedsFlushChanges()
     }
 
     @DiskCacheActor
     private func _removeData(for key: Key) async {
-        options.logger.debug("remove data for \(String(describing: key))")
+        options.logger.debug("\(self.logKey)remove data for \(String(describing: key))")
         staging.remove(for: key)
         setNeedsFlushChanges()
     }
 
     @DiskCacheActor
     private func _removeDataAll() async {
-        options.logger.debug("remove data all")
+        options.logger.debug("\(self.logKey)remove data all")
         staging.removeAll()
         setNeedsFlushChanges()
     }
@@ -213,7 +219,7 @@ extension DiskCache {
         guard !isFlushNeeded else { return }
         isFlushNeeded = true
 
-        options.logger.debug("flush scheduled")
+        options.logger.debug("\(self.logKey)flush scheduled")
 
         let oldTask = flushingTask
         flushingTask = Task {
@@ -232,7 +238,7 @@ extension DiskCache {
         guard isFlushNeeded else { return }
         isFlushNeeded = false
 
-        options.logger.debug("flush starting")
+        options.logger.debug("\(self.logKey)flush starting")
         await _flushIfNeeded(numberOfAttempts: staging.stages.count)
     }
 
@@ -256,7 +262,7 @@ extension DiskCache {
                 do {
                     try await performChangeRemoveAll()
                 } catch {
-                    logger.error("\(String(describing: error))")
+                    logger.error("\(self.logKey)\(String(describing: error))")
                 }
             }
             for change in changes {
@@ -292,7 +298,7 @@ extension DiskCache {
                             try await task.value
                             flushedChanges.append(change)
                         } catch {
-                            logger.error("\(String(describing: error))")
+                            logger.error("\(self.logKey)\(String(describing: error))")
                         }
                     }
                 }
@@ -312,7 +318,7 @@ extension DiskCache {
         }
 
         for change in changes {
-            staging.flushed(change, with: options.logger)
+            staging.flushed(change, with: options.logger, logKey: self.logKey)
         }
 
         if !staging.stages.isEmpty {
@@ -329,11 +335,11 @@ extension DiskCache {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             }
 
-            options.logger.debug("add data: \(data) to \(url.lastPathComponent)")
+            options.logger.debug("\(self.logKey)add data: \(data) to \(url.lastPathComponent)")
             try data.write(to: url)
 
         case .remove:
-            options.logger.debug("remove data at \(url.lastPathComponent)")
+            options.logger.debug("\(self.logKey)remove data at \(url.lastPathComponent)")
             try FileManager.default.removeItem(at: url)
         }
     }
@@ -349,16 +355,16 @@ extension DiskCache {
 extension DiskCache {
     @DiskCacheActor
     private func scheduleSweep(after seconds: Int) {
-        options.logger.debug("sweep scheduled")
+        options.logger.debug("\(self.logKey)sweep scheduled")
         let oldTask = sweepingTask
         sweepingTask = Task {
             try await clock.sleep(until: seconds)
             _ = await oldTask?.result
             do {
-                options.logger.debug("sweep starting")
+                options.logger.debug("\(self.logKey)sweep starting")
                 try performSweep()
             } catch {
-                options.logger.error("sweep error: \(String(describing: error))")
+                options.logger.error("\(self.logKey)sweep error: \(String(describing: error))")
             }
             scheduleSweep(after: 30)
         }
@@ -382,9 +388,9 @@ extension DiskCache {
             do {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
-                options.logger.debug("sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
+                options.logger.debug("\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
             } catch {
-                options.logger.error("sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
+                options.logger.error("\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
             }
         }
     }
@@ -528,16 +534,16 @@ struct Staging<Key: Hashable & Sendable> {
         stages.append(stage)
     }
 
-    mutating func flushed(_ change: Change, with logger: Logger) {
+    mutating func flushed(_ change: Change, with logger: Logger, logKey: @autoclosure @escaping () -> String) {
         for (i, var stage) in stages.enumerated() {
             guard let c = stage.changes[change.key], c.id == change.id else { continue }
             stage.changes.removeValue(forKey: c.key)
             if stage.changes.isEmpty {
                 stages.remove(at: i)
-                logger.debug("flushed change \(String(describing: c.key)), at stage: \(stage.id), removed")
+                logger.debug("\(logKey())flushed change \(String(describing: c.key)), at stage: \(stage.id), removed")
             } else {
                 stages[i] = stage
-                logger.debug("flushed change \(String(describing: c.key)), at stage: \(stage.id)")
+                logger.debug("\(logKey())flushed change \(String(describing: c.key)), at stage: \(stage.id)")
             }
             return
         }
