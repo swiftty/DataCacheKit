@@ -1,6 +1,6 @@
 import Foundation
 
-public protocol Caching<Key, Value> {
+public protocol Caching<Key, Value>: Sendable {
     associatedtype Key: Hashable & Sendable
     associatedtype Value
 
