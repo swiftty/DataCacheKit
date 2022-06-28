@@ -4,7 +4,7 @@ extension MemoryCache {
     public struct Options {
         public var countLimit: Int
 
-        var costLimit: Int?
+        var sizeLimit: Int?
 
         public init(
             countLimit: Int
@@ -17,9 +17,9 @@ extension MemoryCache {
 extension MemoryCache.Options where Value == Data {
     public init(
         countLimit: Int,
-        costLimit: Int
+        sizeLimit: Int
     ) {
         self.countLimit = countLimit
-        self.costLimit = costLimit
+        self.sizeLimit = sizeLimit
     }
 }

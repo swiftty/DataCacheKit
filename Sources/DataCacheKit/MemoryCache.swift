@@ -19,7 +19,7 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
         self.options = options
         self.logger = logger
         nsCache.countLimit = options.countLimit
-        if let costLimit = options.costLimit {
+        if let costLimit = options.sizeLimit {
             nsCache.totalCostLimit = costLimit
         }
     }
