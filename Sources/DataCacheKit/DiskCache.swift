@@ -14,7 +14,7 @@ public struct DiskCacheActor {
 }
 
 // MARK: - DiskCache
-public final class DiskCache<Key: Hashable & Sendable> {
+public final class DiskCache<Key: Hashable & Sendable>: @unchecked Sendable {
     public let options: Options
 
     public subscript (key: Key) -> Data? {
@@ -389,7 +389,7 @@ extension DiskCache {
         }
     }
 
-    private struct Entry {
+    private struct Entry: Sendable {
         let url: URL
         let meta: URLResourceValues
     }
