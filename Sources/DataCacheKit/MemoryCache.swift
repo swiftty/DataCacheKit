@@ -10,8 +10,8 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
     private var queueingTask: Task<Void, Never>?
 
     public subscript (key: Key) -> Value? {
-        get {
-            value(for: key)
+        get async {
+            await value(for: key)
         }
     }
 
@@ -24,8 +24,9 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
         }
     }
 
-    public func value(for key: Key) -> Value? {
-        nsCache.object(forKey: .init(key))?.value
+    public func value(for key: Key) async -> Value? {
+        _ = await queueingTask?.result
+        return nsCache.object(forKey: .init(key))?.value
     }
 
     @discardableResult
