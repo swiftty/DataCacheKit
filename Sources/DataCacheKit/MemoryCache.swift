@@ -70,17 +70,18 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
 }
 
 // MARK: -
-private final class KeyWrapper<Key: Hashable & Sendable>: Hashable {
+private final class KeyWrapper<Key: Hashable & Sendable>: NSObject {
     let key: Key
 
     init(_ key: Key) { self.key = key }
 
-    static func == (lhs: KeyWrapper, rhs: KeyWrapper) -> Bool {
-        lhs.key == rhs.key
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? KeyWrapper<Key> else { return false }
+        return key == other.key
     }
 
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(key)
+    override var hash: Int {
+        key.hashValue
     }
 }
 
