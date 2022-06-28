@@ -41,8 +41,14 @@ public final class DiskCache<Key: Hashable & Sendable> {
     private var _path: URL!
 
     private lazy var _prepare: () throws -> Void = {
-        let dir = options.path
-                ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let dir: URL?
+        switch options.path {
+        case .default(let name):
+            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+
+        case .custom(let url):
+            dir = url
+        }
         _path = dir
         Task {
             await scheduleSweep(after: 10)

@@ -6,20 +6,26 @@ extension DiskCache {
     public struct Options {
         public var sizeLimit: Int
         public var filename: @Sendable (Key) -> String?
-        public var path: URL?
+        public var path: Path
         public var logger: Logger
 
-        public static func `default`() -> Self where Key: CustomStringConvertible {
+        public enum Path {
+            case `default`(name: String)
+            case custom(URL)
+        }
+
+        public static func `default`(path: Path) -> Self where Key: CustomStringConvertible {
             self.init(
                 sizeLimit: 150 * 1024 * 1024,
-                filename: defaultFilename(for:)
+                filename: defaultFilename(for:),
+                path: path
             )
         }
 
         public init(
             sizeLimit: Int,
             filename: @escaping @Sendable (Key) -> String?,
-            path: URL? = nil,
+            path: Path,
             logger: Logger = .init(.disabled)
         ) {
             self.sizeLimit = sizeLimit

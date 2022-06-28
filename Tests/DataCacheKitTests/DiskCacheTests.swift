@@ -20,8 +20,7 @@ final class DiskCacheTests: XCTestCase {
         (try? FileManager.default.contentsOfDirectory(atPath: tmpDir.path).count) ?? 0
     }
     private func cacheOptions<T: CustomStringConvertible>() -> DiskCache<T>.Options {
-        var options = DiskCache<T>.Options.default()
-        options.path = tmpDir
+        var options = DiskCache<T>.Options.default(path: .custom(tmpDir))
         options.filename = { $0.description }
         options.logger = .init(.default)
         return options
