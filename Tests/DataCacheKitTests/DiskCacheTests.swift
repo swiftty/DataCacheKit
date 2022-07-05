@@ -1,17 +1,19 @@
 import XCTest
 @testable import DataCacheKit
 
-@discardableResult
-func yield(until condition: @autoclosure () async -> Bool, limit: Int = 10000) async -> Bool {
+func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure () -> String? = nil, limit: Int = 10000) async throws {
     var limit = limit
     while limit > 0 {
         limit -= 1
         await Task.yield()
         if await condition() {
-            return true
+            return
         }
     }
-    return false
+    struct E: LocalizedError {
+        var errorDescription: String?
+    }
+    throw E(errorDescription: message())
 }
 
 final class DiskCacheTests: XCTestCase {
@@ -38,7 +40,7 @@ final class DiskCacheTests: XCTestCase {
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testStoreData() async {
+    func testStoreData() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -60,19 +62,11 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(500))
 
-        do {
-            let result = await yield(until: await cache.staging.changes(for: "empty") == nil)
-            XCTAssertFalse(result)
-        }
-
         XCTAssertEqual(numberOfItems, 0)
 
         clock.advance(by: .milliseconds(500))
 
-        do {
-            let result = await yield(until: await cache.staging.changes(for: "empty") == nil)
-            XCTAssertTrue(result)
-        }
+        try await yield(until: await cache.staging.changes(for: "empty") == nil)
 
         XCTAssertEqual(numberOfItems, 1)
 
@@ -89,7 +83,7 @@ final class DiskCacheTests: XCTestCase {
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testStoreDataMultiple() async {
+    func testStoreDataMultiple() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -104,17 +98,14 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(1000))
 
-        do {
-            let result = await yield(until: await cache.staging.stages.isEmpty)
-            XCTAssertTrue(result)
-        }
+        try await yield(until: await cache.staging.stages.isEmpty)
 
         XCTAssertEqual(numberOfItems, 2)
     }
 
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testRemoveData() async {
+    func testRemoveData() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -142,10 +133,7 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(1000))
 
-        do {
-            let result = await yield(until: await cache.staging.stages.isEmpty)
-            XCTAssertTrue(result)
-        }
+        try await yield(until: await cache.staging.stages.isEmpty)
 
         XCTAssertEqual(numberOfItems, 1)
     }
