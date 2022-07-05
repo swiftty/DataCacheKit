@@ -80,10 +80,10 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
     private(set) var sweepingTask: Task<Void, Error>?
 
     @DiskCacheActor
-    private var isFlushNeeded = false
+    private(set) var isFlushNeeded = false
 
     @DiskCacheActor
-    private var isFlushScheduled = false
+    private(set) var isFlushScheduled = false
 
     @DiskCacheActor
     private var logKey: String {
@@ -120,13 +120,15 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
         let task = Task<Data?, Error> { @DiskCacheActor in
             _ = await queueingTask?.result
 
-            if let change = staging.changes(for: key) {
-                if change.deleted {
+            for stage in staging.stages.reversed() {
+                if stage.removeAll {
                     return nil
                 }
-                switch change.operation {
-                case .add(let data): return data
-                case .remove: return nil
+                if let change = stage.changes[key] {
+                    switch change.operation {
+                    case .add(let data): return data
+                    case .remove: return nil
+                    }
                 }
             }
 
@@ -137,7 +139,7 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
             let task = Task<Data?, Error>.detached {
                 do {
                     return try Data(contentsOf: url)
-                } catch CocoaError.fileNoSuchFile {
+                } catch CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile {
                     return nil
                 }
             }
@@ -229,17 +231,18 @@ extension DiskCache {
 
         let oldTask = flushingTask
         flushingTask = Task {
-            try await clock.sleep(until: 1)
-            _ = await oldTask?.result
-            await flushIfNeeded()
+            try await flushIfNeeded(oldTask)
         }
     }
 
     @DiskCacheActor
-    private func flushIfNeeded() async {
+    private func flushIfNeeded(_ oldTask: Task<Void, Error>?) async throws {
         guard !isFlushScheduled else { return }
         isFlushScheduled = true
         defer { isFlushScheduled = false }
+
+        try await clock.sleep(until: 1)
+        try? await oldTask?.value
 
         guard isFlushNeeded else { return }
         isFlushNeeded = false
@@ -281,13 +284,12 @@ extension DiskCache {
         guard numberOfAttempts > 0, let stage = staging.stages.first else { return }
         let logger = logger
         let changes = await withTaskGroup(of: Void.self, returning: [Staging<Key>.Change].self) { group in
-            var deleted = false
+            let deleted = stage.removeAll
             var flushedChanges: [Staging<Key>.Change] = []
             var deletedChanges: [Staging<Key>.Change] = []
 
             for change in stage.changes.values {
-                if change.deleted {
-                    deleted = deleted || change.deleted
+                if deleted {
                     deletedChanges.append(change)
                 } else {
                     guard let url = url(for: change.key) else {
@@ -321,9 +323,7 @@ extension DiskCache {
             return flushedChanges
         }
 
-        for change in changes {
-            staging.flushed(change, with: logger, logKey: self.logKey)
-        }
+        staging.flushed(id: stage.id, changes: changes, with: logger, logKey: self.logKey)
 
         if !staging.stages.isEmpty {
             await _flushIfNeeded(numberOfAttempts: numberOfAttempts - 1)
@@ -477,35 +477,26 @@ extension DiskCache {
 @DiskCacheActor
 struct Staging<Key: Hashable & Sendable> {
     @DiskCacheActor
-    struct Change {
-        let key: Key
-        let id: Int
-        let operation: Operation
-        var deleted = false
-    }
-    @DiskCacheActor
     enum Operation: Equatable {
         case add(Data)
         case remove
     }
     @DiskCacheActor
+    struct Change {
+        let key: Key
+        let id: Int
+        let operation: Operation
+    }
+    @DiskCacheActor
     struct Stage {
         let id: Int
         var changes: [Key: Change]
+        var removeAll = false
     }
 
     private(set) var stages: [Stage] = []
     private var stageID = IDGenerator()
     private var changeID = IDGenerator()
-
-    func changes(for key: Key) -> Change? {
-        for stage in stages.reversed() {
-            if let change = stage.changes[key] {
-                return change
-            }
-        }
-        return nil
-    }
 
     mutating func add(data: Data, for key: Key) {
         let change = Change(key: key, id: changeID.nextID(), operation: .add(data))
@@ -532,32 +523,40 @@ struct Staging<Key: Hashable & Sendable> {
                 keys.insert(change.key)
             }
         }
-        var stage = Stage(id: stageID.nextID(), changes: [:])
+        var stage = Stage(id: stageID.nextID(), changes: [:], removeAll: true)
         for key in keys {
-            stage.changes[key] = Change(key: key, id: changeID.nextID(), operation: .remove, deleted: true)
+            stage.changes[key] = Change(key: key, id: changeID.nextID(), operation: .remove)
         }
         stages.append(stage)
     }
 
-    mutating func flushed(_ change: Change, with logger: Logger, logKey: @autoclosure @escaping () -> String) {
-        for (i, var stage) in stages.enumerated() {
-            guard let c = stage.changes[change.key], c.id == change.id else { continue }
-            stage.changes.removeValue(forKey: c.key)
-            if stage.changes.isEmpty {
-                stages.remove(at: i)
-                logger.debug("\(logKey())flushed change \(String(describing: c.key)), at stage: \(stage.id), removed")
-            } else {
-                stages[i] = stage
-                logger.debug("\(logKey())flushed change \(String(describing: c.key)), at stage: \(stage.id)")
-            }
+    mutating func flushed(id: Int, changes: [Change], with logger: Logger, logKey: @autoclosure @escaping () -> String) {
+        guard case (let i, var stage)? = stages.enumerated().first(where: { $1.id == id }) else {
+            assert(changes.isEmpty)
             return
+        }
+
+        for change in changes {
+            guard let c = stage.changes[change.key], c.id == change.id else {
+                assertionFailure("maybe invalid state?")
+                continue
+            }
+            stage.changes.removeValue(forKey: c.key)
+            logger.debug("\(logKey())flushed change \(String(describing: c.key)), at stage: \(stage.id)")
+        }
+
+        if stage.changes.isEmpty {
+            stages.remove(at: i)
+            logger.debug("\(logKey())flushed stage: \(stage.id), removed")
+        } else {
+            stages[i] = stage
         }
     }
 
-    private func checkConflicts(on key: Key? = nil) -> Bool {
+    private func checkConflicts(on key: Key) -> Bool {
         guard let stage = stages.last else { return true }
-        if stage.changes.values.contains(where: \.deleted) { return true }
-        if let key, stage.changes.keys.contains(key) { return true }
+        if stage.removeAll { return true }
+        if stage.changes.keys.contains(key) { return true }
         return false
     }
 }

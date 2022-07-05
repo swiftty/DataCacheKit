@@ -1,19 +1,33 @@
 import XCTest
 @testable import DataCacheKit
 
-@discardableResult
-func yield(until condition: @autoclosure () async -> Bool, limit: Int = 10000) async -> Bool {
+func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure () -> String? = nil, limit: Int = 10000) async throws {
     var limit = limit
     while limit > 0 {
         limit -= 1
         await Task.yield()
         if await condition() {
-            return true
+            return
         }
     }
-    return false
+    struct E: LocalizedError {
+        var errorDescription: String?
+    }
+    throw E(errorDescription: message())
 }
 
+private extension Staging {
+    func changes(for key: Key) -> Change? {
+        for stage in stages {
+            if let change = stage.changes[key] {
+                return change
+            }
+        }
+        return nil
+    }
+}
+
+@MainActor
 final class DiskCacheTests: XCTestCase {
     private var tmpDir: URL!
     private var numberOfItems: Int {
@@ -38,7 +52,7 @@ final class DiskCacheTests: XCTestCase {
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testStoreData() async {
+    func testStoreData() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -60,19 +74,11 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(500))
 
-        do {
-            let result = await yield(until: await cache.staging.changes(for: "empty") == nil)
-            XCTAssertFalse(result)
-        }
-
         XCTAssertEqual(numberOfItems, 0)
 
         clock.advance(by: .milliseconds(500))
 
-        do {
-            let result = await yield(until: await cache.staging.changes(for: "empty") == nil)
-            XCTAssertTrue(result)
-        }
+        try await yield(until: await cache.staging.changes(for: "empty") == nil)
 
         XCTAssertEqual(numberOfItems, 1)
 
@@ -89,7 +95,7 @@ final class DiskCacheTests: XCTestCase {
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testStoreDataMultiple() async {
+    func testStoreDataMultiple() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -104,17 +110,14 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(1000))
 
-        do {
-            let result = await yield(until: await cache.staging.stages.isEmpty)
-            XCTAssertTrue(result)
-        }
+        try await yield(until: await cache.staging.stages.isEmpty)
 
         XCTAssertEqual(numberOfItems, 2)
     }
 
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testRemoveData() async {
+    func testRemoveData() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -142,12 +145,52 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(1000))
 
-        do {
-            let result = await yield(until: await cache.staging.stages.isEmpty)
-            XCTAssertTrue(result)
-        }
+        try await yield(until: await cache.staging.stages.isEmpty)
 
         XCTAssertEqual(numberOfItems, 1)
+    }
+
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
+    func testRemoveDataAll() async throws {
+        let clock = ManualClock()
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
+
+        cache.store(Data([1]), for: "item0")
+        try await yield(until: await cache.isFlushScheduled)
+
+        clock.advance(by: .milliseconds(1000))
+
+        do {
+            try? await cache.flushingTask?.value
+            let data0 = try await cache.value(for: "item0")
+            XCTAssertEqual(data0, Data([1]))
+            XCTAssertEqual(numberOfItems, 1)
+
+            let isEmpty = await cache.staging.stages.isEmpty
+            XCTAssertTrue(isEmpty)
+        } catch {
+            XCTFail("\(error)")
+        }
+
+        cache.removeAll()
+        try await yield(until: await cache.isFlushScheduled)
+
+        clock.advance(by: .milliseconds(1000))
+
+        do {
+            var isEmpty = await cache.staging.stages.isEmpty
+            XCTAssertFalse(isEmpty)
+
+            try? await cache.flushingTask?.value
+            let data0 = try await cache.value(for: "item0")
+            XCTAssertNil(data0)
+            XCTAssertEqual(numberOfItems, 0)
+
+            isEmpty = await cache.staging.stages.isEmpty
+            XCTAssertTrue(isEmpty)
+        } catch {
+            XCTFail("\(error)")
+        }
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
