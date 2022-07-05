@@ -16,6 +16,18 @@ func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure
     throw E(errorDescription: message())
 }
 
+private extension Staging {
+    func changes(for key: Key) -> Change? {
+        for stage in stages {
+            if let change = stage.changes[key] {
+                return change
+            }
+        }
+        return nil
+    }
+}
+
+@MainActor
 final class DiskCacheTests: XCTestCase {
     private var tmpDir: URL!
     private var numberOfItems: Int {
@@ -136,6 +148,49 @@ final class DiskCacheTests: XCTestCase {
         try await yield(until: await cache.staging.stages.isEmpty)
 
         XCTAssertEqual(numberOfItems, 1)
+    }
+
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
+    func testRemoveDataAll() async throws {
+        let clock = ManualClock()
+        let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
+
+        cache.store(Data([1]), for: "item0")
+        try await yield(until: await cache.isFlushScheduled)
+
+        clock.advance(by: .milliseconds(1000))
+
+        do {
+            try? await cache.flushingTask?.value
+            let data0 = try await cache.value(for: "item0")
+            XCTAssertEqual(data0, Data([1]))
+            XCTAssertEqual(numberOfItems, 1)
+
+            let isEmpty = await cache.staging.stages.isEmpty
+            XCTAssertTrue(isEmpty)
+        } catch {
+            XCTFail("\(error)")
+        }
+
+        cache.removeAll()
+        try await yield(until: await cache.isFlushScheduled)
+
+        clock.advance(by: .milliseconds(1000))
+
+        do {
+            var isEmpty = await cache.staging.stages.isEmpty
+            XCTAssertFalse(isEmpty)
+
+            try? await cache.flushingTask?.value
+            let data0 = try await cache.value(for: "item0")
+            XCTAssertNil(data0)
+            XCTAssertEqual(numberOfItems, 0)
+
+            isEmpty = await cache.staging.stages.isEmpty
+            XCTAssertTrue(isEmpty)
+        } catch {
+            XCTFail("\(error)")
+        }
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
