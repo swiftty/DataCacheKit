@@ -402,9 +402,21 @@ extension DiskCache {
         }
     }
 
-    private struct Entry: Sendable {
+    private struct Entry {
         let url: URL
-        let meta: URLResourceValues
+        let meta: Meta
+
+        struct Meta {
+            let fileSize: Int?
+            let totalFileAllocatedSize: Int?
+            let contentAccessDate: Date?
+
+            init(_ meta: URLResourceValues, in keys: Set<URLResourceKey>) {
+                fileSize = meta.fileSize
+                totalFileAllocatedSize = meta.totalFileAllocatedSize
+                contentAccessDate = meta.contentAccessDate
+            }
+        }
     }
 
     @DiskCacheActor
@@ -419,7 +431,7 @@ extension DiskCache {
         let keys = Set(keys)
         return urls.compactMap { url in
             guard let meta = try? url.resourceValues(forKeys: keys) else { return nil }
-            return Entry(url: url, meta: meta)
+            return Entry(url: url, meta: .init(meta, in: keys))
         }
     }
 
