@@ -16,17 +16,6 @@ func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure
     throw E(errorDescription: message())
 }
 
-private extension Staging {
-    func changes(for key: Key) -> Change? {
-        for stage in stages {
-            if let change = stage.changes[key] {
-                return change
-            }
-        }
-        return nil
-    }
-}
-
 @MainActor
 final class DiskCacheTests: XCTestCase {
     private var tmpDir: URL!
@@ -56,39 +45,38 @@ final class DiskCacheTests: XCTestCase {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
-        await cache.store(Data(), for: "empty").value
+        cache.store(Data(), for: "empty")
+
+        try await yield(until: await cache.isFlushScheduled)
 
         do {
             // load from staging (memory)
-            let change = await cache.staging.changes(for: "empty")
-            XCTAssertNotNil(change)
+            let data = try await cache.value(for: "empty")
+            XCTAssertNotNil(data)
 
             let url = try XCTUnwrap(cache.url(for: "empty"))
             XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
-
-            let data = try await cache.value(for: "empty")
-            XCTAssertNotNil(data)
         } catch {
             XCTFail("\(error)")
         }
 
         clock.advance(by: .milliseconds(500))
+        try? await SuspendingClock().sleep(until: .now.advanced(by: .microseconds(300)))
 
         XCTAssertEqual(numberOfItems, 0)
 
         clock.advance(by: .milliseconds(500))
-
-        try await yield(until: await cache.staging.changes(for: "empty") == nil)
+        try? await SuspendingClock().sleep(until: .now.advanced(by: .microseconds(300)))
 
         XCTAssertEqual(numberOfItems, 1)
 
         do {
             // load from disk
-            let url = try XCTUnwrap(cache.url(for: "empty"))
-            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-
             let data = try await cache.value(for: "empty")
             XCTAssertNotNil(data)
+
+            let url = try XCTUnwrap(cache.url(for: "empty"))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         } catch {
             XCTFail("\(error)")
         }
@@ -100,7 +88,9 @@ final class DiskCacheTests: XCTestCase {
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
         cache.store(Data([1]), for: "item0")
-        await cache.store(Data([1, 2]), for: "item1").value
+        cache.store(Data([1, 2]), for: "item1")
+
+        try await yield(until: await cache.isFlushScheduled)
 
         do {
             cache.logger.debug("check staging items")
@@ -110,7 +100,7 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(1000))
 
-        try await yield(until: await cache.staging.stages.isEmpty)
+        try? await cache.flushingTask?.value
 
         XCTAssertEqual(numberOfItems, 2)
     }
@@ -123,7 +113,9 @@ final class DiskCacheTests: XCTestCase {
 
         cache.store(Data([1]), for: "item0")
         cache.store(Data([1, 2]), for: "item1")
-        await cache.remove(for: "item0").value
+        cache.remove(for: "item0")
+
+        try await yield(until: await cache.isFlushScheduled)
 
         do {
             let data0 = try await cache.value(for: "item0")
@@ -145,7 +137,7 @@ final class DiskCacheTests: XCTestCase {
 
         clock.advance(by: .milliseconds(1000))
 
-        try await yield(until: await cache.staging.stages.isEmpty)
+        try? await cache.flushingTask?.value
 
         XCTAssertEqual(numberOfItems, 1)
     }
@@ -194,7 +186,7 @@ final class DiskCacheTests: XCTestCase {
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    func testSweep() async {
+    func testSweep() async throws {
         let allocationUnit = 4096
 
         var options = cacheOptions() as DiskCache<String>.Options
@@ -204,16 +196,18 @@ final class DiskCacheTests: XCTestCase {
 
         cache.store(Data([1]), for: "item0")
         cache.store(Data([1, 2]), for: "item1")
-        await cache.store(Data([1, 2, 3]), for: "item2").value
+        cache.store(Data([1, 2, 3]), for: "item2")
+
+        try await yield(until: await cache.isFlushScheduled)
 
         do {
             cache.logger.debug("check staging layers")
             clock.advance(by: .milliseconds(1000))
 
+            try? await cache.flushingTask?.value
+
             let data2 = try? await cache.value(for: "item2")
             XCTAssertEqual(data2, Data([1, 2, 3]))
-
-            try? await cache.flushingTask?.value
 
             XCTAssertEqual(numberOfItems, 3)
         }
