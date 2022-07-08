@@ -103,7 +103,7 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
     }
 
     @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    init<C: _Concurrency.Clock>(options: Options, clock: C, logger: Logger = .init(.disabled)) where C.Instant.Duration == Duration {
+    init<C: Clock>(options: Options, clock: C, logger: Logger = .init(.disabled)) where C.Instant.Duration == Duration {
         self.options = options
         self.clock = NewClock(clock)
         self.logger = logger
@@ -253,76 +253,8 @@ extension DiskCache {
 
     @DiskCacheActor
     private func _flushIfNeeded(numberOfAttempts: Int) async {
-        func _peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, Error> {
-            let task = Task {
-                try await performChange(change, with: url)
-            }
-            assert(runningTasks[change.key] == nil)
-            runningTasks[change.key] = task
-            Task {
-                _ = await task.result
-                runningTasks.removeValue(forKey: change.key)
-            }
-
-            return task
-        }
-        func _performChangeRemoveAll(for changes: [Staging<Key>.Change]) -> Task<Void, Error> {
-            let task = Task<Void, Error> {
-                try await performChangeRemoveAll()
-            }
-            for change in changes {
-                assert(runningTasks[change.key] == nil)
-                runningTasks[change.key] = task
-                Task {
-                    _ = await task.result
-                    runningTasks.removeValue(forKey: change.key)
-                }
-            }
-            return task
-        }
-
         guard numberOfAttempts > 0, let stage = staging.stages.first else { return }
-        let logger = logger
-        let changes = await withTaskGroup(of: Void.self, returning: [Staging<Key>.Change].self) { group in
-            let deleted = stage.removeAll
-            var flushedChanges: [Staging<Key>.Change] = []
-            var deletedChanges: [Staging<Key>.Change] = []
-
-            for change in stage.changes.values {
-                if deleted {
-                    deletedChanges.append(change)
-                } else {
-                    guard let url = url(for: change.key) else {
-                        flushedChanges.append(change)
-                        continue
-                    }
-                    let task = _peformChange(change, with: url)
-                    group.addTask { @DiskCacheActor in
-                        do {
-                            try await task.value
-                            flushedChanges.append(change)
-                        } catch {
-                            logger.error("\(self.logKey)\(String(describing: error))")
-                        }
-                    }
-                }
-            }
-
-            await group.waitForAll()
-
-            if deleted {
-                let task = _performChangeRemoveAll(for: deletedChanges)
-                do {
-                    try await task.value
-                    flushedChanges.append(contentsOf: deletedChanges)
-                } catch {
-                    logger.error("\(self.logKey)\(String(describing: error))")
-                }
-            }
-
-            return flushedChanges
-        }
-
+        let changes = await _flush(on: stage)
         staging.flushed(id: stage.id, changes: changes, with: logger, logKey: self.logKey)
 
         if !staging.stages.isEmpty {
@@ -330,29 +262,99 @@ extension DiskCache {
         }
     }
 
-    @DiskCacheActor
-    private func performChange(_ change: Staging<Key>.Change, with url: URL) async throws {
-        switch change.operation {
-        case .add(let data):
-            if case let dir = url.deletingLastPathComponent(),
-               !FileManager.default.fileExists(atPath: dir.path) {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    private func _flush(on stage: Staging<Key>.Stage) async -> [Staging<Key>.Change] {
+        await withTaskGroup(of: [Staging<Key>.Change].self) { @DiskCacheActor group in
+            if stage.removeAll {
+                let changes = Array(stage.changes.values)
+                let task = performChangeRemoveAll(for: changes)
+                group.addTask {
+                    do {
+                        try await task.value
+                        return changes
+                    } catch {
+                        return []
+                    }
+                }
+            } else {
+                for change in stage.changes.values {
+                    guard let url = url(for: change.key) else {
+                        group.addTask { [change] }
+                        continue
+                    }
+                    let task = peformChange(change, with: url)
+                    group.addTask {
+                        do {
+                            try await task.value
+                            return [change]
+                        } catch {
+                            return []
+                        }
+                    }
+                }
             }
 
-            logger.debug("\(self.logKey)added data: \(data) to \(url.lastPathComponent)")
-            try data.write(to: url)
-
-        case .remove:
-            logger.debug("\(self.logKey)removed data at \(url.lastPathComponent)")
-            try FileManager.default.removeItem(at: url)
+            var results: [Staging<Key>.Change] = []
+            for await changes in group {
+                results.append(contentsOf: changes)
+            }
+            return results
         }
     }
 
     @DiskCacheActor
-    private func performChangeRemoveAll() async throws {
-        let dir = try path
-        try FileManager.default.removeItem(at: dir)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, Error> {
+        let task = Task {
+            do {
+                switch change.operation {
+                case .add(let data):
+                    if case let dir = url.deletingLastPathComponent(),
+                       !FileManager.default.fileExists(atPath: dir.path) {
+                        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    }
+
+                    logger.debug("\(self.logKey)added data: \(data) to \(url.lastPathComponent)")
+                    try data.write(to: url)
+
+                case .remove:
+                    logger.debug("\(self.logKey)removed data at \(url.lastPathComponent)")
+                    try FileManager.default.removeItem(at: url)
+                }
+            } catch {
+                logger.error("\(self.logKey)\(String(describing: error))")
+                throw error
+            }
+        }
+        assert(runningTasks[change.key] == nil)
+        runningTasks[change.key] = task
+        Task {
+            _ = await task.result
+            runningTasks.removeValue(forKey: change.key)
+        }
+
+        return task
+    }
+
+    @DiskCacheActor
+    private func performChangeRemoveAll(for changes: some Collection<Staging<Key>.Change>) -> Task<Void, Error> {
+        let task = Task {
+            do {
+                let dir = try path
+                try FileManager.default.removeItem(at: dir)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            } catch {
+                logger.error("\(self.logKey)\(String(describing: error))")
+                throw error
+            }
+        }
+        for change in changes {
+            assert(runningTasks[change.key] == nil)
+            runningTasks[change.key] = task
+            Task {
+                _ = await task.result
+                runningTasks.removeValue(forKey: change.key)
+            }
+        }
+        return task
     }
 }
 
@@ -400,9 +402,21 @@ extension DiskCache {
         }
     }
 
-    private struct Entry: Sendable {
+    private struct Entry {
         let url: URL
-        let meta: URLResourceValues
+        let meta: Meta
+
+        struct Meta {
+            let fileSize: Int?
+            let totalFileAllocatedSize: Int?
+            let contentAccessDate: Date?
+
+            init(_ meta: URLResourceValues, in keys: Set<URLResourceKey>) {
+                fileSize = meta.fileSize
+                totalFileAllocatedSize = meta.totalFileAllocatedSize
+                contentAccessDate = meta.contentAccessDate
+            }
+        }
     }
 
     @DiskCacheActor
@@ -417,7 +431,7 @@ extension DiskCache {
         let keys = Set(keys)
         return urls.compactMap { url in
             guard let meta = try? url.resourceValues(forKeys: keys) else { return nil }
-            return Entry(url: url, meta: meta)
+            return Entry(url: url, meta: .init(meta, in: keys))
         }
     }
 
