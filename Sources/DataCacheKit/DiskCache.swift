@@ -115,6 +115,10 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
     }
 
     public func value(for key: Key) async throws -> Data? {
+        try await value(for: key, with: Date())
+    }
+
+    func value(for key: Key, with now: Date) async throws -> Data? {
         await Task.yield()
 
         let task = Task<Data?, Error> { @DiskCacheActor in
@@ -138,7 +142,16 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
 
             let task = Task<Data?, Error>.detached {
                 do {
-                    return try Data(contentsOf: url)
+                    let data = try Data(contentsOf: url)
+
+                    do {
+                        var url = url
+                        var meta = URLResourceValues()
+                        meta.contentAccessDate = now
+                        try url.setResourceValues(meta)
+                    } catch {}
+
+                    return data
                 } catch CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile {
                     return nil
                 }
@@ -384,21 +397,36 @@ extension DiskCache {
 
         var size = items.reduce(0) { $0 + ($1.meta.totalFileAllocatedSize ?? 0) }
 
-        guard size > options.sizeLimit else { return }
-
-        let sizeLimit = Int(Double(options.sizeLimit) * 0.7)
-        items = items.sorted(by: { lhs, rhs in
-            (lhs.meta.contentAccessDate ?? .distantPast) > (rhs.meta.contentAccessDate ?? .distantPast)
-        })
-
-        while size > sizeLimit, let item = items.popLast() {
+        @discardableResult
+        func removeItem(_ item: Entry) -> Bool {
             do {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
                 logger.debug("\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
+                return true
             } catch {
                 logger.error("\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
+                return false
             }
+        }
+
+        if let timeout = options.expirationTimeout {
+            let date = Date().addingTimeInterval(-timeout)
+            for (i, item) in items.enumerated().reversed() {
+                guard let accessDate = item.meta.contentAccessDate, accessDate <= date else { continue }
+                if removeItem(item) {
+                    items.remove(at: i)
+                }
+            }
+        }
+
+        guard size > options.sizeLimit else { return }
+        let sizeLimit = Int(Double(options.sizeLimit) * 0.7)
+        items = items.sorted(by: { lhs, rhs in
+            (lhs.meta.contentAccessDate ?? .distantPast) > (rhs.meta.contentAccessDate ?? .distantPast)
+        })
+        while size > sizeLimit, let item = items.popLast() {
+            removeItem(item)
         }
     }
 

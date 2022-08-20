@@ -6,6 +6,7 @@ extension DiskCache {
         public var sizeLimit: Int
         public var filename: @Sendable (Key) -> String?
         public var path: Path
+        public var expirationTimeout: TimeInterval?
 
         public enum Path {
             case `default`(name: String)
@@ -23,11 +24,13 @@ extension DiskCache {
         public init(
             sizeLimit: Int,
             filename: @escaping @Sendable (Key) -> String?,
-            path: Path
+            path: Path,
+            expirationTimeout: TimeInterval? = nil
         ) {
             self.sizeLimit = sizeLimit
             self.filename = filename
             self.path = path
+            self.expirationTimeout = expirationTimeout
         }
 
         @Sendable
