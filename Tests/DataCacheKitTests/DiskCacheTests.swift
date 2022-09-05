@@ -40,8 +40,9 @@ final class DiskCacheTests: XCTestCase {
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreData() async throws {
+        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
+
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -82,8 +83,9 @@ final class DiskCacheTests: XCTestCase {
         }
     }
 
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreDataMultiple() async throws {
+        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
+
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -105,9 +107,9 @@ final class DiskCacheTests: XCTestCase {
         XCTAssertEqual(numberOfItems, 2)
     }
 
-
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveData() async throws {
+        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
+
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -142,8 +144,9 @@ final class DiskCacheTests: XCTestCase {
         XCTAssertEqual(numberOfItems, 1)
     }
 
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveDataAll() async throws {
+        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
+
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -185,8 +188,9 @@ final class DiskCacheTests: XCTestCase {
         }
     }
 
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testSweep() async throws {
+        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
+
         let allocationUnit = 4096
 
         var options = cacheOptions() as DiskCache<String>.Options
