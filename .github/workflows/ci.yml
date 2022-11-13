@@ -23,16 +23,16 @@ jobs:
       - name: Run tests
         run: swift test
         
-  linux:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        swift: [ "5.7" ]
-    container:
-      image: swift:${{ matrix.swift }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: swift build
-      - name: Run tests
-        run: swift test
+#   linux:
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         swift: [ "5.7" ]
+#     container:
+#       image: swift:${{ matrix.swift }}
+#     steps:
+#       - uses: actions/checkout@v3
+#       - name: Build
+#         run: swift build
+#       - name: Run tests
+#         run: swift test
