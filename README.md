@@ -8,7 +8,7 @@ A simple data cache interface.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/swiftty/DataCacheKit", from: "0.0.1")
+    .package(url: "https://github.com/swiftty/DataCacheKit", from: "0.0.2")
 ]
 ```
 
