@@ -1,0 +1,79 @@
+name: 'nextversion'
+description: 'get next version from tag or inputs.'
+inputs:
+  bump:
+    description: 'bump up next version for major | minor | patch'
+    required: true
+  from:
+    description: 'input current version manually.'
+  tag_prefix:
+    description: 'find existing version tag from git.'
+    default: ''
+outputs:
+  next:
+    description: 'next version with bump target.'
+    value: ${{ steps.bump.outputs.next }}
+runs:
+  using: 'composite'
+  steps:
+    - shell: bash 
+      name: 'validate'
+      run: |
+        validate_bump() {
+          local i
+          options=('patch' 'minor' 'major')
+          for i in ${options[@]}; do 
+            if [[ ${i} = ${1} ]]; then
+              return 0
+            fi
+          done
+          return 1
+        }
+
+        if validate_bump "${{ inputs.bump }}"; then
+          echo 'bump: ${{ inputs.bump }}'
+        else
+          echo 'invalid bump: ${{ inputs.bump }}'
+          exit 1
+        fi
+    - shell: bash
+      name: 'get version'
+      id: version
+      run: |
+        if [[ "${{ inputs.from }}" != '' ]]; then
+          echo 'version=${{ inputs.from }}' >> $GITHUB_OUTPUT
+        else
+          version=$(git tag | sort -rV | grep -E "${{ inputs.tag_prefix }}(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)" | head -n 1 || echo '0.0.0')
+          echo "version=$version" >> $GITHUB_OUTPUT
+        fi
+    - shell: bash 
+      name: 'bump'
+      id: bump
+      run: |
+        regex="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+        if [[ "${{ steps.version.outputs.version }}" =~ $regex ]]; then
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+
+          case "${{ inputs.bump }}" in 
+            "major")
+              major=$((major + 1))
+              minor="0"
+              patch="0"
+              ;;
+            "minor")
+              minor=$((minor + 1))
+              patch="0"
+              ;;
+            "patch")
+              patch=$((patch + 1));;
+            *)
+              exit 1
+          esac
+
+          echo "next=${{ inputs.tag_prefix }}$major.$minor.$patch" >> $GITHUB_OUTPUT
+        else
+          echo "version not found: ${{ steps.version.outputs.version }}"
+          exit 1
+        fi
