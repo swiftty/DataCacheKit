@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: ./.github/actions/nextversion
+      - uses: swiftty/nextversion@v0.0.1
         id: nextversion
         with:
           bump: ${{ github.event.inputs.version }}
