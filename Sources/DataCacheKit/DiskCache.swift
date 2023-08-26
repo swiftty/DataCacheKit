@@ -8,9 +8,9 @@ import OSLog
 
 @globalActor
 public struct DiskCacheActor {
-    private actor _Actor {}
+    public actor Actor {}
 
-    public static let shared: some Actor & AnyObject = _Actor()
+    public static let shared = Actor()
 }
 
 // MARK: - DiskCache
