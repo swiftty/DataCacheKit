@@ -9,7 +9,7 @@ on:
 
 jobs:
   mac-os:
-    runs-on: macos-13
+    runs-on: macos-14
     strategy:
       matrix:
         xcode: [ "14.1" ]
