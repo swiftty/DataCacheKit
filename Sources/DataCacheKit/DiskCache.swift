@@ -43,26 +43,7 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
         }
     }
     private var _path: URL!
-
-    private lazy var _prepare: () throws -> Void = {
-        let dir: URL?
-        switch options.path {
-        case .default(let name):
-            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
-
-        case .custom(let url):
-            dir = url
-        }
-        _path = dir
-        Task {
-            await scheduleSweep(after: 10)
-        }
-        return {
-            if dir == nil {
-                throw CocoaError(.fileNoSuchFile)
-            }
-        }
-    }()
+    private var prepared = false
 
     private let queueingLock = NSLock()
     private var queueingTask: Task<Void, Never>?
@@ -206,6 +187,30 @@ public final class DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Send
     }
 
     // MARK: -
+    private func _prepare() throws {
+        if prepared {
+            return
+        }
+        defer { prepared = true }
+
+        let dir: URL?
+        switch options.path {
+        case .default(let name):
+            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+
+        case .custom(let url):
+            dir = url
+        }
+        _path = dir
+        Task {
+            await scheduleSweep(after: 10)
+        }
+
+        if dir == nil {
+            throw CocoaError(.fileNoSuchFile)
+        }
+    }
+
     @DiskCacheActor
     private func _storeData(_ data: Data, for key: Key) async {
         logger.debug("\(self.logKey)store data: \(data) for \(String(describing: key))")

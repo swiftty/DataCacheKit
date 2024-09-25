@@ -1,4 +1,5 @@
-import XCTest
+import Testing
+import Foundation
 @testable import DataCacheKit
 
 func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure () -> String? = nil, limit: Int = 10000) async throws {
@@ -16,8 +17,7 @@ func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure
     throw E(errorDescription: message())
 }
 
-@MainActor
-final class DiskCacheTests: XCTestCase {
+final class DiskCacheTests {
     private var tmpDir: URL!
     private var numberOfItems: Int {
         (try? FileManager.default.contentsOfDirectory(atPath: tmpDir.path).count) ?? 0
@@ -28,21 +28,19 @@ final class DiskCacheTests: XCTestCase {
         return options
     }
 
-    override func setUp() async throws {
-        try await super.setUp()
+    init() async throws {
         tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         print(tmpDir.absoluteString)
-        XCTAssertEqual(numberOfItems, 0)
+        #expect(numberOfItems == 0)
     }
 
-    override func tearDown() async throws {
-        try await super.tearDown()
+    deinit {
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
+    @Test
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreData() async throws {
-        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
-
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -53,39 +51,35 @@ final class DiskCacheTests: XCTestCase {
         do {
             // load from staging (memory)
             let data = try await cache.value(for: "empty")
-            XCTAssertNotNil(data)
+            #expect(data != nil)
 
-            let url = try XCTUnwrap(cache.url(for: "empty"))
-            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
-        } catch {
-            XCTFail("\(error)")
+            let url = try #require(cache.url(for: "empty"))
+            #expect(!FileManager.default.fileExists(atPath: url.path))
         }
 
         clock.advance(by: .milliseconds(500))
-        try? await SuspendingClock().sleep(until: .now.advanced(by: .microseconds(300)))
 
-        XCTAssertEqual(numberOfItems, 0)
+        #expect(numberOfItems == 0)
 
         clock.advance(by: .milliseconds(500))
-        try? await SuspendingClock().sleep(until: .now.advanced(by: .microseconds(300)))
 
-        XCTAssertEqual(numberOfItems, 1)
+        try await yield(until: await !cache.isFlushScheduled)
+
+        #expect(numberOfItems == 1)
 
         do {
             // load from disk
             let data = try await cache.value(for: "empty")
-            XCTAssertNotNil(data)
+            #expect(data != nil)
 
-            let url = try XCTUnwrap(cache.url(for: "empty"))
-            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-        } catch {
-            XCTFail("\(error)")
+            let url = try #require(cache.url(for: "empty"))
+            #expect(FileManager.default.fileExists(atPath: url.path))
         }
     }
 
+    @Test
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreDataMultiple() async throws {
-        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
-
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -97,19 +91,19 @@ final class DiskCacheTests: XCTestCase {
         do {
             cache.logger.debug("check staging items")
             let count = await cache.staging.stages.first?.changes.count
-            XCTAssertEqual(count, 2)
+            #expect(count == 2)
         }
 
         clock.advance(by: .milliseconds(1000))
 
         try? await cache.flushingTask?.value
 
-        XCTAssertEqual(numberOfItems, 2)
+        #expect(numberOfItems == 2)
     }
 
+    @Test
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveData() async throws {
-        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
-
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -122,31 +116,29 @@ final class DiskCacheTests: XCTestCase {
         do {
             let data0 = try await cache.value(for: "item0")
             let data1 = try await cache.value(for: "item1")
-            XCTAssertNil(data0)
-            XCTAssertEqual(data1, Data([1, 2]))
-        } catch {
-            XCTFail("\(error)")
+            #expect(data0 == nil)
+            #expect(data1 == Data([1, 2]))
         }
 
         do {
             cache.logger.debug("check staging layers")
             let count = await cache.staging.stages.count
-            XCTAssertEqual(count, 2)
+            #expect(count == 2)
 
             let change0 = await cache.staging.stages.last?.changes["item0"]?.operation
-            XCTAssertEqual(change0, .remove)
+            #expect(change0 == .remove)
         }
 
         clock.advance(by: .milliseconds(1000))
 
         try? await cache.flushingTask?.value
 
-        XCTAssertEqual(numberOfItems, 1)
+        #expect(numberOfItems == 1)
     }
 
+    @Test
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveDataAll() async throws {
-        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
-
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
@@ -158,13 +150,11 @@ final class DiskCacheTests: XCTestCase {
         do {
             try? await cache.flushingTask?.value
             let data0 = try await cache.value(for: "item0")
-            XCTAssertEqual(data0, Data([1]))
-            XCTAssertEqual(numberOfItems, 1)
+            #expect(data0 == Data([1]))
+            #expect(numberOfItems == 1)
 
             let isEmpty = await cache.staging.stages.isEmpty
-            XCTAssertTrue(isEmpty)
-        } catch {
-            XCTFail("\(error)")
+            #expect(isEmpty)
         }
 
         cache.removeAll()
@@ -174,23 +164,21 @@ final class DiskCacheTests: XCTestCase {
 
         do {
             var isEmpty = await cache.staging.stages.isEmpty
-            XCTAssertFalse(isEmpty)
+            #expect(!isEmpty)
 
             try? await cache.flushingTask?.value
             let data0 = try await cache.value(for: "item0")
-            XCTAssertNil(data0)
-            XCTAssertEqual(numberOfItems, 0)
+            #expect(data0 == nil)
+            #expect(numberOfItems == 0)
 
             isEmpty = await cache.staging.stages.isEmpty
-            XCTAssertTrue(isEmpty)
-        } catch {
-            XCTFail("\(error)")
+            #expect(isEmpty)
         }
     }
 
+    @Test
+    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testSweep() async throws {
-        guard #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) else { return }
-
         let allocationUnit = 4096
 
         var options = cacheOptions() as DiskCache<String>.Options
@@ -211,9 +199,9 @@ final class DiskCacheTests: XCTestCase {
             try? await cache.flushingTask?.value
 
             let data2 = try? await cache.value(for: "item2")
-            XCTAssertEqual(data2, Data([1, 2, 3]))
+            #expect(data2 == Data([1, 2, 3]))
 
-            XCTAssertEqual(numberOfItems, 3)
+            #expect(numberOfItems == 3)
         }
 
         do {
@@ -227,14 +215,12 @@ final class DiskCacheTests: XCTestCase {
 
             try? await cache.sweepingTask?.value
 
-            XCTAssertEqual(numberOfItems, 2)
+            #expect(numberOfItems == 2)
 
             let data0 = try? await cache.value(for: "item0")
             let data1 = try? await cache.value(for: "item2")
-            XCTAssertEqual(data0, Data([1]))
-            XCTAssertEqual(data1, Data([1, 2, 3]))
-        } catch {
-            XCTFail("\(error)")
+            #expect(data0 == Data([1]))
+            #expect(data1 == Data([1, 2, 3]))
         }
     }
 }
