@@ -1,6 +1,6 @@
 import Foundation
 
-public protocol Caching<Key, Value>: Sendable {
+public protocol Caching<Key, Value>: Actor {
     associatedtype Key: Hashable & Sendable
     associatedtype Value
 

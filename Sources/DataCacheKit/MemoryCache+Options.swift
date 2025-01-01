@@ -1,7 +1,7 @@
 import Foundation
 
 extension MemoryCache {
-    public struct Options {
+    public struct Options: Sendable {
         public var countLimit: Int
 
         var sizeLimit: Int?

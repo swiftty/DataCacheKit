@@ -1,12 +1,11 @@
 import Foundation
 import OSLog
 
-public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching, @unchecked Sendable {
-    public let options: Options
-    public let logger: Logger
+public actor MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching {
+    public nonisolated let options: Options
+    public nonisolated let logger: Logger
 
     private let nsCache = NSCache<KeyWrapper<Key>, ValueWrapper<Value>>()
-    private let queueingLock = NSLock()
     private var queueingTask: Task<Void, Never>?
 
     public subscript (key: Key) -> Value? {
@@ -31,8 +30,6 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
 
     @discardableResult
     public func store(_ value: Value, for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
         let oldTask = queueingTask
         let task = Task {
             await oldTask?.value
@@ -44,8 +41,6 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
 
     @discardableResult
     public func remove(for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
         let oldTask = queueingTask
         let task = Task {
             await oldTask?.value
@@ -57,8 +52,6 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
 
     @discardableResult
     public func removeAll() -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
         let oldTask = queueingTask
         let task = Task {
             await oldTask?.value
