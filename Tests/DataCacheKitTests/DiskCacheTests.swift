@@ -39,7 +39,6 @@ final class DiskCacheTests {
     }
 
     @Test
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreData() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
@@ -78,7 +77,6 @@ final class DiskCacheTests {
     }
 
     @Test
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testStoreDataMultiple() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
@@ -102,7 +100,6 @@ final class DiskCacheTests {
     }
 
     @Test
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveData() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
@@ -137,7 +134,6 @@ final class DiskCacheTests {
     }
 
     @Test
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testRemoveDataAll() async throws {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
@@ -177,7 +173,6 @@ final class DiskCacheTests {
     }
 
     @Test
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     func testSweep() async throws {
         let allocationUnit = 4096
 

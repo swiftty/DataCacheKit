@@ -27,7 +27,7 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
 //        }
     }
 
-    private let clock: _Clock
+    private let clock: any Clock<Duration>
 
     private var path: URL {
         get throws {
@@ -57,23 +57,9 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
         return "[\(path.lastPathComponent)] "
     }
 
-    public init(options: Options, logger: Logger = .init(.disabled)) {
+    public init(options: Options, clock: some Clock<Duration> = .suspending, logger: Logger = .init(.disabled)) {
         self.options = options
-        if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
-            self.clock = NewClock(.suspending)
-        } else {
-            self.clock = _Clock()
-        }
-        self.logger = logger
-        Task {
-            try await _prepare()
-        }
-    }
-
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    init<C: Clock>(options: Options, clock: C, logger: Logger = .init(.disabled)) where C.Instant.Duration == Duration {
-        self.options = options
-        self.clock = NewClock(clock)
+        self.clock = clock
         self.logger = logger
         Task {
             try await _prepare()
@@ -225,7 +211,7 @@ extension DiskCache {
         isFlushScheduled = true
         defer { isFlushScheduled = false }
 
-        try await clock.sleep(until: 1)
+        try await clock.sleep(for: .seconds(1))
         try? await oldTask?.value
 
         guard isFlushNeeded else { return }
@@ -344,7 +330,7 @@ extension DiskCache {
         logger.debug("\(self.logKey)sweep scheduled")
         let oldTask = sweepingTask
         sweepingTask = Task {
-            try await clock.sleep(until: seconds)
+            try await clock.sleep(for: .seconds(seconds))
             _ = await oldTask?.result
             do {
                 logger.debug("\(self.logKey)sweep starting")
@@ -456,27 +442,6 @@ extension DiskCache {
             try contents(keys: [.totalFileAllocatedSizeKey]).reduce(0) {
                 $0 + ($1.meta.totalFileAllocatedSize ?? 0)
             }
-        }
-    }
-}
-
-extension DiskCache {
-    class _Clock: @unchecked Sendable {
-        func sleep(until seconds: Int) async throws {
-            try await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
-        }
-    }
-
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
-    final class NewClock<C: Clock>: _Clock, @unchecked Sendable where C.Instant.Duration == Duration {
-        let clock: C
-
-        init(_ clock: C) {
-            self.clock = clock
-        }
-
-        override func sleep(until seconds: Int) async throws {
-            try await clock.sleep(until: clock.now.advanced(by: .seconds(seconds)), tolerance: nil)
         }
     }
 }
