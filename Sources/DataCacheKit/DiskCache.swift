@@ -38,7 +38,6 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     private var _path: URL!
     private var prepared = false
 
-    private let queueingLock = NSLock()
     private var queueingTask: Task<Void, Never>?
 
     private(set) lazy var staging = Staging<Key>()
@@ -134,41 +133,26 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
 
     @discardableResult
     public func store(_ data: Data, for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
             await _storeData(data, for: key)
         }
-        queueingTask = task
-        return task
     }
 
     @discardableResult
     public func remove(for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
             await _removeData(for: key)
         }
-        queueingTask = task
-        return task
     }
 
     @discardableResult
     public func removeAll() -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
             await _removeDataAll()
         }
-        queueingTask = task
-        return task
     }
 
     public func url(for key: Key) -> URL? {
