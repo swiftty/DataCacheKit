@@ -32,7 +32,7 @@ struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable 
 
     func removeValue(forKey key: Key) {
         entries.withLock { entries in
-            if let entry = entries.values[key] {
+            if let entry = entries.values.removeValue(forKey: key) {
                 entries.totalCost -= entry.cost
                 entries.remove(entry)
             }
@@ -46,20 +46,35 @@ struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable 
     }
 }
 
+extension LRUCache {
+    subscript (_ key: Key, cost cost: Int = 0) -> Value? {
+        get {
+            value(forKey: key)
+        }
+        nonmutating set {
+            if let newValue {
+                setValue(newValue, forKey: key, cost: cost)
+            } else {
+                removeValue(forKey: key)
+            }
+        }
+    }
+}
+
 private extension LRUCache {
     final class CacheEntry: @unchecked Sendable {
         let key: Key
         var value: Value
         var cost: Int
-        var prevByCost: CacheEntry?
-        var nextByCost: CacheEntry?
+        weak var prev: CacheEntry?
+        weak var next: CacheEntry?
 
         init(key: Key, value: Value, cost: Int) {
             self.key = key
             self.value = value
             self.cost = cost
-            self.prevByCost = nil
-            self.nextByCost = nil
+            self.prev = nil
+            self.next = nil
         }
     }
 
@@ -68,7 +83,8 @@ private extension LRUCache {
         var totalCost = 0
         var totalCostLimit = 0
         var countLimit = 0
-        var head: CacheEntry?
+        weak var head: CacheEntry?
+        weak var tail: CacheEntry?
 
         mutating func set(_ value: Value, forKey key: Key, cost g: Int) {
             let g = max(g, 0)
@@ -80,10 +96,8 @@ private extension LRUCache {
                 entry.cost = g
                 entry.value = value
 
-                if costDiff != 0 {
-                    remove(entry)
-                    insert(entry)
-                }
+                remove(entry)
+                insert(entry)
             } else {
                 let entry = CacheEntry(key: key, value: value, cost: g)
                 values[key] = entry
@@ -114,62 +128,40 @@ private extension LRUCache {
         }
 
         mutating func insert(_ entry: CacheEntry) {
-            guard var curr = head else {
-                entry.prevByCost = nil
-                entry.nextByCost = nil
+            guard head != nil else {
+                entry.prev = nil
+                entry.next = nil
 
                 head = entry
+                tail = entry
                 return
             }
 
-            guard entry.cost > curr.cost else {
-                entry.prevByCost = nil
-                entry.nextByCost = curr
-                curr.prevByCost = entry
-
-                head = entry
-                return
-            }
-
-            while let next = curr.nextByCost, next.cost < entry.cost {
-                curr = next
-            }
-
-            let next = curr.nextByCost
-
-            curr.nextByCost = entry
-            entry.prevByCost = curr
-
-            entry.nextByCost = next
-            next?.prevByCost = entry
+            tail?.next = entry
+            entry.prev = tail
+            tail = entry
         }
 
         mutating func remove(_ entry: CacheEntry) {
-            let oldPrev = entry.prevByCost
-            let oldNext = entry.nextByCost
+            let oldPrev = entry.prev
+            let oldNext = entry.next
 
-            oldPrev?.nextByCost = oldNext
-            oldNext?.prevByCost = oldPrev
+            oldPrev?.next = oldNext
+            oldNext?.prev = oldPrev
 
             if entry === head {
                 head = oldNext
+            }
+            if entry === tail {
+                tail = oldPrev
             }
         }
 
         mutating func removeAll() {
             values.removeAll()
-
-            while let curr = head {
-                let next = curr.nextByCost
-
-                curr.prevByCost = nil
-                curr.nextByCost = nil
-
-                head = next
-            }
-
             totalCost = 0
+
+            assert(head == nil && tail == nil)
         }
     }
 }
-
