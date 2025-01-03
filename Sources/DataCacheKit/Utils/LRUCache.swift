@@ -122,7 +122,7 @@ private extension LRUCache {
                 return
             }
 
-            guard entry.cost > curr.cost else {
+            guard entry.cost >= curr.cost else {
                 entry.prevByCost = nil
                 entry.nextByCost = curr
                 curr.prevByCost = entry
