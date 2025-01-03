@@ -32,7 +32,7 @@ struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable 
 
     func removeValue(forKey key: Key) {
         entries.withLock { entries in
-            if let entry = entries.values[key] {
+            if let entry = entries.values.removeValue(forKey: key) {
                 entries.totalCost -= entry.cost
                 entries.remove(entry)
             }

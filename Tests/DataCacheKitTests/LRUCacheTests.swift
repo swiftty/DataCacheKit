@@ -230,6 +230,113 @@ struct LRUCacheTests {
         #expect(cache[2] == nil)
         #expect(cache[3] == 3)
     }
+
+    @Test
+    func testRemoveHeadValue() {
+        let cache = LRUCache<Int, Int>()
+
+        // Given
+        // -
+
+        // When
+        cache[1] = 1
+        cache[2] = 2
+        cache[3] = 3
+
+        cache[1] = nil
+
+        // Then
+        #expect(cache[1] == nil)
+        #expect(cache[2] == 2)
+        #expect(cache[3] == 3)
+    }
+
+    @Test
+    func testRemoveMiddleValue() {
+        let cache = LRUCache<Int, Int>()
+
+        // Given
+        // -
+
+        // When
+        cache[1] = 1
+        cache[2] = 2
+        cache[3] = 3
+
+        cache[2] = nil
+
+        // Then
+        #expect(cache[1] == 1)
+        #expect(cache[2] == nil)
+        #expect(cache[3] == 3)
+    }
+
+    @Test
+    func testRemoveTailValue() {
+        let cache = LRUCache<Int, Int>()
+
+        // Given
+        // -
+
+        // When
+        cache[1] = 1
+        cache[2] = 2
+        cache[3] = 3
+
+        cache[3] = nil
+
+        // Then
+        #expect(cache[1] == 1)
+        #expect(cache[2] == 2)
+        #expect(cache[3] == nil)
+    }
+
+    @Test
+    func testRemoveAll() {
+        let cache = LRUCache<Int, Int>()
+
+        // Given
+        // -
+
+        // When
+        cache[1] = 1
+        cache[2] = 2
+        cache[3] = 3
+
+        cache.removeAllValues()
+
+        // Then
+        #expect(cache[1] == nil)
+        #expect(cache[2] == nil)
+        #expect(cache[3] == nil)
+    }
+
+    @Test
+    func testReferenceCount() {
+        final class MyClass: @unchecked Sendable {}
+
+        let cache = LRUCache<Int, MyClass>()
+
+        // Given
+        var ref: MyClass? = MyClass()
+        weak var weakRef = ref
+
+        // When
+        autoreleasepool {
+            cache[1] = ref
+
+            #expect(cache[1] === ref)
+
+            ref = nil
+
+            #expect(weakRef != nil)
+
+            cache.removeAllValues()
+        }
+
+        // Then
+        #expect(weakRef == nil)
+    }
 }
 
 // MARK: - private
