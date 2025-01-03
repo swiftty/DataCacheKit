@@ -117,8 +117,16 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
         return try await task.value
     }
 
+
     @discardableResult
-    public func store(_ data: Data, for key: Key) -> Task<Void, Never> {
+    public nonisolated func store(_ value: Value, for key: Key) -> Task<Void, Never> {
+        return Task {
+            let task = await _store(value, for: key)
+            await task.value
+        }
+    }
+
+    private func _store(_ data: Data, for key: Key) -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
             await _storeData(data, for: key)
@@ -126,7 +134,14 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     }
 
     @discardableResult
-    public func remove(for key: Key) -> Task<Void, Never> {
+    public nonisolated func remove(for key: Key) -> Task<Void, Never> {
+        return Task {
+            let task = await _remove(for: key)
+            await task.value
+        }
+    }
+
+    private func _remove(for key: Key) -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
             await _removeData(for: key)
@@ -134,7 +149,14 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     }
 
     @discardableResult
-    public func removeAll() -> Task<Void, Never> {
+    public nonisolated func removeAll() -> Task<Void, Never> {
+        return Task {
+            let task = await _removeAll()
+            await task.value
+        }
+    }
+
+    private func _removeAll() -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
             await _removeDataAll()

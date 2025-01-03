@@ -43,7 +43,7 @@ final class DiskCacheTests {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
-        await cache.store(Data(), for: "empty")
+        cache.store(Data(), for: "empty")
 
         try await yield(until: await cache.isFlushScheduled)
 
@@ -81,8 +81,8 @@ final class DiskCacheTests {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
-        await cache.store(Data([1]), for: "item0")
-        await cache.store(Data([1, 2]), for: "item1")
+        cache.store(Data([1]), for: "item0")
+        cache.store(Data([1, 2]), for: "item1")
 
         try await yield(until: await cache.isFlushScheduled)
 
@@ -104,9 +104,9 @@ final class DiskCacheTests {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
-        await cache.store(Data([1]), for: "item0")
-        await cache.store(Data([1, 2]), for: "item1")
-        await cache.remove(for: "item0")
+        cache.store(Data([1]), for: "item0")
+        cache.store(Data([1, 2]), for: "item1")
+        cache.remove(for: "item0")
 
         try await yield(until: await cache.isFlushScheduled)
 
@@ -138,7 +138,7 @@ final class DiskCacheTests {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: cacheOptions(), clock: clock, logger: .init(.default))
 
-        await cache.store(Data([1]), for: "item0")
+        cache.store(Data([1]), for: "item0")
         try await yield(until: await cache.isFlushScheduled)
 
         clock.advance(by: .milliseconds(1000))
@@ -153,7 +153,7 @@ final class DiskCacheTests {
             #expect(isEmpty)
         }
 
-        await cache.removeAll()
+        cache.removeAll()
         try await yield(until: await cache.isFlushScheduled)
 
         clock.advance(by: .milliseconds(1000))
@@ -181,9 +181,9 @@ final class DiskCacheTests {
         let clock = ManualClock()
         let cache = DiskCache<String>(options: options, clock: clock)
 
-        await cache.store(Data([1]), for: "item0")
-        await cache.store(Data([1, 2]), for: "item1")
-        await cache.store(Data([1, 2, 3]), for: "item2")
+        cache.store(Data([1]), for: "item0")
+        cache.store(Data([1, 2]), for: "item1")
+        cache.store(Data([1, 2, 3]), for: "item2")
 
         try await yield(until: await cache.isFlushScheduled)
 
