@@ -53,12 +53,19 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
             return try decoder.decode(Value.self, from: data)
         }()
 
-        await onMemery.store(value, for: key)
+        await onMemery.store(value, for: key).value
         return value
     }
 
     @discardableResult
-    public func store(_ value: Value, for key: Key) -> Task<Void, Never> {
+    public nonisolated func store(_ value: Value, for key: Key) -> Task<Void, Never> {
+        return Task {
+            let task = await _store(value, for: key)
+            await task.value
+        }
+    }
+
+    private func _store(_ value: Value, for key: Key) -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
             async let memory: Void = await onMemery.store(value, for: key).value
@@ -70,7 +77,14 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     }
 
     @discardableResult
-    public func remove(for key: Key) -> Task<Void, Never> {
+    public nonisolated func remove(for key: Key) -> Task<Void, Never> {
+        return Task {
+            let task = await _remove(for: key)
+            await task.value
+        }
+    }
+
+    private func _remove(for key: Key) -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
             async let memory: Void = await onMemery.remove(for: key).value
@@ -82,7 +96,14 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     }
 
     @discardableResult
-    public func removeAll() -> Task<Void, Never> {
+    public nonisolated func removeAll() -> Task<Void, Never> {
+        return Task {
+            let task = await _removeAll()
+            await task.value
+        }
+    }
+
+    private func _removeAll() -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
             async let memory: Void = await onMemery.removeAll().value

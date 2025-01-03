@@ -9,11 +9,11 @@ public protocol Caching<Key, Value>: Actor {
     func value(for key: Key) async throws -> Value?
 
     @discardableResult
-    func store(_ value: Value, for key: Key) -> Task<Void, Never>
+    nonisolated func store(_ value: Value, for key: Key) -> Task<Void, Never>
 
     @discardableResult
-    func remove(for key: Key) -> Task<Void, Never>
+    nonisolated func remove(for key: Key) -> Task<Void, Never>
 
     @discardableResult
-    func removeAll() -> Task<Void, Never>
+    nonisolated func removeAll() -> Task<Void, Never>
 }
