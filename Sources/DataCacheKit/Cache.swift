@@ -1,11 +1,19 @@
 import Foundation
 import OSLog
 
-public final class Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching, @unchecked Sendable {
-    public typealias Options = (forMemory: MemoryCache<Key, Value>.Options, forDisk: DiskCache<Key>.Options)
+public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching {
+    public struct Options: Sendable {
+        public let forMemory: MemoryCache<Key, Value>.Options
+        public let forDisk: DiskCache<Key>.Options
 
-    public let options: Options
-    public let logger: Logger
+        public init(forMemory: MemoryCache<Key, Value>.Options, forDisk: DiskCache<Key>.Options) {
+            self.forMemory = forMemory
+            self.forDisk = forDisk
+        }
+    }
+
+    public nonisolated let options: Options
+    public nonisolated let logger: Logger
 
     public subscript (key: Key) -> Value? {
         get async throws {
@@ -16,7 +24,6 @@ public final class Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: C
     private let onMemery: MemoryCache<Key, Value>
     private let onDisk: DiskCache<Key>
 
-    private let queueingLock = NSLock()
     private var queueingTask: Task<Void, Never>?
 
     public init(options: Options, logger: Logger = .init(.disabled)) {
@@ -26,8 +33,8 @@ public final class Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: C
         self.logger = logger
     }
 
-    public func prepare() throws {
-        try onDisk.prepare()
+    public func prepare() async throws {
+        try await onDisk.prepare()
     }
 
     public func value(for key: Key) async throws -> Value? {
@@ -46,64 +53,48 @@ public final class Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: C
             return try decoder.decode(Value.self, from: data)
         }()
 
-        onMemery.store(value, for: key)
+        await onMemery.store(value, for: key)
         return value
     }
 
     @discardableResult
     public func store(_ value: Value, for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
             async let memory: Void = await onMemery.store(value, for: key).value
             async let disk: Void = await _storeToDisk(value, for: key)
 
             await memory
             await disk
         }
-        queueingTask = task
-        return task
     }
 
     @discardableResult
     public func remove(for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
             async let memory: Void = await onMemery.remove(for: key).value
             async let disk: Void = await onDisk.remove(for: key).value
 
             await memory
             await disk
         }
-        queueingTask = task
-        return task
     }
 
     @discardableResult
     public func removeAll() -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
-
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
             async let memory: Void = await onMemery.removeAll().value
             async let disk: Void = await onDisk.removeAll().value
 
             await memory
             await disk
         }
-        queueingTask = task
-        return task
     }
 
-    public func url(for key: Key) -> URL? {
-        onDisk.url(for: key)
+    public func url(for key: Key) async -> URL? {
+        await onDisk.url(for: key)
     }
 }
 

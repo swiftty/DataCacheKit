@@ -1,12 +1,11 @@
 import Foundation
 import OSLog
 
-public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching, @unchecked Sendable {
-    public let options: Options
-    public let logger: Logger
+public actor MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching {
+    public nonisolated let options: Options
+    public nonisolated let logger: Logger
 
-    private let nsCache = NSCache<KeyWrapper<Key>, ValueWrapper<Value>>()
-    private let queueingLock = NSLock()
+    private let lruCache = LRUCache<Key, Value>()
     private var queueingTask: Task<Void, Never>?
 
     public subscript (key: Key) -> Value? {
@@ -18,75 +17,38 @@ public final class MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Cachi
     public init(options: Options, logger: Logger = .init(.disabled)) {
         self.options = options
         self.logger = logger
-        nsCache.countLimit = options.countLimit
+        lruCache.countLimit = options.countLimit
         if let costLimit = options.sizeLimit {
-            nsCache.totalCostLimit = costLimit
+            lruCache.totalCostLimit = costLimit
         }
     }
 
     public func value(for key: Key) async -> Value? {
         _ = await queueingTask?.result
-        return nsCache.object(forKey: .init(key))?.value
+        return lruCache.value(forKey: key)
     }
 
     @discardableResult
     public func store(_ value: Value, for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
-            nsCache.setObject(.init(value), forKey: .init(key), cost: (value as? Data)?.count ?? 0)
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
+            lruCache.setValue(value, forKey: key, cost: (value as? Data)?.count ?? 0)
         }
-        queueingTask = task
-        return task
     }
 
     @discardableResult
     public func remove(for key: Key) -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
-            nsCache.removeObject(forKey: .init(key))
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
+            lruCache.removeValue(forKey: key)
         }
-        queueingTask = task
-        return task
     }
 
     @discardableResult
     public func removeAll() -> Task<Void, Never> {
-        queueingLock.lock()
-        defer { queueingLock.unlock() }
-        let oldTask = queueingTask
-        let task = Task {
-            await oldTask?.value
-            nsCache.removeAllObjects()
+        queueingTask.enqueueAndReplacing { [weak self] in
+            guard let self else { return }
+            lruCache.removeAllValues()
         }
-        queueingTask = task
-        return task
     }
-}
-
-// MARK: -
-private final class KeyWrapper<Key: Hashable & Sendable>: NSObject {
-    let key: Key
-
-    init(_ key: Key) { self.key = key }
-
-    override func isEqual(_ object: Any?) -> Bool {
-        guard let other = object as? KeyWrapper<Key> else { return false }
-        return key == other.key
-    }
-
-    override var hash: Int {
-        key.hashValue
-    }
-}
-
-private final class ValueWrapper<Value> {
-    let value: Value
-
-    init(_ value: Value) { self.value = value }
 }

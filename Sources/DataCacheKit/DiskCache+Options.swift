@@ -2,13 +2,13 @@ import Foundation
 import CommonCrypto
 
 extension DiskCache {
-    public struct Options {
+    public struct Options: Sendable {
         public var sizeLimit: Int
         public var filename: @Sendable (Key) -> String?
         public var path: Path
         public var expirationTimeout: TimeInterval?
 
-        public enum Path {
+        public enum Path: Sendable {
             case `default`(name: String)
             case custom(URL)
         }

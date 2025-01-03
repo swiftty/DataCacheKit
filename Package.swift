@@ -6,10 +6,11 @@ import PackageDescription
 let package = Package(
     name: "DataCacheKit",
     platforms: [
-        .iOS(.v14),
-        .tvOS(.v14),
-        .watchOS(.v8),
-        .macOS(.v12)
+        .iOS(.v16),
+        .tvOS(.v16),
+        .watchOS(.v9),
+        .visionOS(.v2),
+        .macOS(.v13)
     ],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
