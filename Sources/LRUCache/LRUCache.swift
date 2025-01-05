@@ -1,36 +1,38 @@
 // https://github.com/swiftlang/swift-corelibs-foundation/blob/25d044f2c4ceb635d9f714f588673fd7a29790c1/Sources/Foundation/NSCache.swift
 import os
 
-struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable {
-    var totalCostLimit: Int {
+public struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable {
+    public var totalCostLimit: Int {
         get { entries.withLock { $0.totalCostLimit } }
         nonmutating set { entries.withLock { $0.totalCostLimit = newValue } }
     }
 
-    var countLimit: Int {
+    public var countLimit: Int {
         get { entries.withLock { $0.countLimit } }
         nonmutating set { entries.withLock { $0.countLimit = newValue } }
     }
 
     private let entries = OSAllocatedUnfairLock<Entiries>(initialState: .init())
 
-    func value(forKey key: Key) -> Value? {
+    public init() {}
+
+    public func value(forKey key: Key) -> Value? {
         entries.withLock { entries in
             entries.values[key]?.value
         }
     }
 
-    func setValue(_ value: Value, forKey key: Key) {
+    public func setValue(_ value: Value, forKey key: Key) {
         setValue(value, forKey: key, cost: 0)
     }
 
-    func setValue(_ value: Value, forKey key: Key, cost: Int) {
+    public func setValue(_ value: Value, forKey key: Key, cost: Int) {
         entries.withLock { entries in
             entries.set(value, forKey: key, cost: cost)
         }
     }
 
-    func removeValue(forKey key: Key) {
+    public func removeValue(forKey key: Key) {
         entries.withLock { entries in
             if let entry = entries.values.removeValue(forKey: key) {
                 entries.totalCost -= entry.cost
@@ -39,7 +41,7 @@ struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable 
         }
     }
 
-    func removeAllValues() {
+    public func removeAllValues() {
         entries.withLock { entiries in
             entiries.removeAll()
         }
@@ -47,7 +49,7 @@ struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Sendable 
 }
 
 extension LRUCache {
-    subscript (_ key: Key, cost cost: Int = 0) -> Value? {
+    public subscript (_ key: Key, cost cost: Int = 0) -> Value? {
         get {
             value(forKey: key)
         }

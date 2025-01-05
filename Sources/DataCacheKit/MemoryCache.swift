@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import LRUCache
 
 public actor MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching {
     public nonisolated let options: Options

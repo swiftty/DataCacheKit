@@ -1,5 +1,5 @@
 import Testing
-@testable import DataCacheKit
+@testable import LRUCache
 import Foundation
 
 struct LRUCacheTests {
