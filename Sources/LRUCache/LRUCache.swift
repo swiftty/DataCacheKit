@@ -18,7 +18,10 @@ public struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Se
 
     public func value(forKey key: Key) -> Value? {
         entries.withLock { entries in
-            entries.values[key]?.value
+            guard let entry = entries.values[key] else { return nil }
+            entries.remove(entry)
+            entries.insert(entry)
+            return entry.value
         }
     }
 

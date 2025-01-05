@@ -76,6 +76,46 @@ struct LRUCacheTests {
     }
 
     @Test
+    func testCountLimitAccess() {
+        let cache = LRUCache<Int, Int>()
+
+        // Given
+        cache.countLimit = 2
+
+        // When
+        cache[1] = 1
+        cache[2] = 2
+
+        _ = cache[1]
+        cache[3] = 3
+
+        // Then
+        #expect(cache[1] == 1)
+        #expect(cache[2] == nil)
+        #expect(cache[3] == 3)
+    }
+
+    @Test
+    func testCountLimitAccessNSCache() {
+        let cache = NSCacheWrapper<Int, Int>()
+
+        // Given
+        cache.countLimit = 2
+
+        // When
+        cache[1] = 1
+        cache[2] = 2
+
+        _ = cache[1]
+        cache[3] = 3
+
+        // Then
+        #expect(cache[1] == 1)
+        #expect(cache[2] == nil)
+        #expect(cache[3] == 3)
+    }
+
+    @Test
     func testCountLimitWithCost1() {
         let cache = LRUCache<Int, Int>()
 
