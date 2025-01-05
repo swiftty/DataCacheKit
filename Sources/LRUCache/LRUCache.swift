@@ -157,6 +157,9 @@ private extension LRUCache {
             if entry === tail {
                 tail = oldPrev
             }
+
+            entry.next = nil
+            entry.prev = nil
         }
 
         mutating func removeAll() {
