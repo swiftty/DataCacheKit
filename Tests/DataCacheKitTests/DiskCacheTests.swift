@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import DataCacheKit
+import os
 
 func yield(
     until condition: @autoclosure () async -> Bool, message: @autoclosure () -> String? = nil, limit: Int = 10000,
