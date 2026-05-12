@@ -2,11 +2,16 @@ import Testing
 @testable import LRUCache
 import Foundation
 
+private func anyCache<Key, Value>(_ actual: some AnyCache<Key, Value>) -> any AnyCache<Key, Value> {
+    actual
+}
+
 struct LRUCacheTests {
-    @Test
-    func testCostLimit() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCostLimit(cache: any AnyCache<Int, Int>) {
         // Given
         cache.totalCostLimit = 10
 
@@ -21,28 +26,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testCostLimitNSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.totalCostLimit = 10
-
-        // When
-        cache[1, cost: 4] = 1
-        cache[2, cost: 5] = 2
-        cache[3, cost: 5] = 3
-
-        // Then
-        #expect(cache[1] == nil)
-        #expect(cache[2] == 2)
-        #expect(cache[3] == 3)
-    }
-
-    @Test
-    func testCountLimit() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCountLimit(cache: any AnyCache<Int, Int>) {
         // Given
         cache.countLimit = 2
 
@@ -57,28 +45,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testCountLimitNSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.countLimit = 2
-
-        // When
-        cache[1] = 1
-        cache[2] = 2
-        cache[3] = 3
-
-        // Then
-        #expect(cache[1] == nil)
-        #expect(cache[2] == 2)
-        #expect(cache[3] == 3)
-    }
-
-    @Test
-    func testCountLimitAccess() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCountLimitAccess(cache: any AnyCache<Int, Int>) {
         // Given
         cache.countLimit = 2
 
@@ -95,30 +66,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testCountLimitAccessNSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.countLimit = 2
-
-        // When
-        cache[1] = 1
-        cache[2] = 2
-
-        _ = cache[1]
-        cache[3] = 3
-
-        // Then
-        #expect(cache[1] == 1)
-        #expect(cache[2] == nil)
-        #expect(cache[3] == 3)
-    }
-
-    @Test
-    func testCountLimitWithCost1() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCountLimitWithCost1(cache: any AnyCache<Int, Int>) {
         // Given
         cache.countLimit = 2
         cache.totalCostLimit = 5
@@ -134,29 +86,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testCountLimitWithCost1NSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.countLimit = 2
-        cache.totalCostLimit = 5
-
-        // When
-        cache[1, cost: 3] = 1
-        cache[2, cost: 3] = 2
-        cache[3, cost: 3] = 3
-
-        // Then
-        #expect(cache[1] == nil)
-        #expect(cache[2] == nil)
-        #expect(cache[3] == 3)
-    }
-
-    @Test
-    func testCountLimitWithCost2() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCountLimitWithCost2(cache: any AnyCache<Int, Int>) {
         // Given
         cache.countLimit = 2
         cache.totalCostLimit = 3
@@ -172,29 +106,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testCountLimitWithCost2NSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.countLimit = 2
-        cache.totalCostLimit = 3
-
-        // When
-        cache[1, cost: 3] = 1
-        cache[2, cost: 2] = 2
-        cache[3, cost: 1] = 3
-
-        // Then
-        #expect(cache[1] == nil)
-        #expect(cache[2] == 2)
-        #expect(cache[3] == 3)
-    }
-
-    @Test
-    func testCountLimitWithCost3() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCountLimitWithCost3(cache: any AnyCache<Int, Int>) {
         // Given
         cache.countLimit = 2
         cache.totalCostLimit = 3
@@ -211,30 +127,11 @@ struct LRUCacheTests {
         #expect(cache[3] == nil)
     }
 
-    @Test
-    func testCountLimitWithCost3NSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.countLimit = 2
-        cache.totalCostLimit = 3
-
-        // When
-        cache[1, cost: 3] = 1
-        cache[2, cost: 2] = 2
-        cache[3, cost: 1] = 3
-        cache[1, cost: 3] = 1
-
-        // Then
-        #expect(cache[1] == 1)
-        #expect(cache[2] == nil)
-        #expect(cache[3] == nil)
-    }
-
-    @Test
-    func testCountLimitWithCost4() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testCountLimitWithCost4(cache: any AnyCache<Int, Int>) {
         // Given
         cache.totalCostLimit = 10
 
@@ -251,30 +148,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testCountLimitWithCost4NSCache() {
-        let cache = NSCacheWrapper<Int, Int>()
-
-        // Given
-        cache.totalCostLimit = 10
-
-        // When
-        cache[1, cost: 3] = 1
-        cache[2, cost: 2] = 2
-        cache[3, cost: 1] = 3
-        cache[1, cost: 3] = 1
-        cache[3, cost: 7] = 3
-
-        // Then
-        #expect(cache[1] == 1)
-        #expect(cache[2] == nil)
-        #expect(cache[3] == 3)
-    }
-
-    @Test
-    func testRemoveHeadValue() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testRemoveHeadValue(cache: any AnyCache<Int, Int>) {
         // Given
         // -
 
@@ -291,10 +169,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testRemoveMiddleValue() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testRemoveMiddleValue(cache: any AnyCache<Int, Int>) {
         // Given
         // -
 
@@ -311,10 +190,11 @@ struct LRUCacheTests {
         #expect(cache[3] == 3)
     }
 
-    @Test
-    func testRemoveTailValue() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testRemoveTailValue(cache: any AnyCache<Int, Int>) {
         // Given
         // -
 
@@ -331,10 +211,11 @@ struct LRUCacheTests {
         #expect(cache[3] == nil)
     }
 
-    @Test
-    func testRemoveAll() {
-        let cache = LRUCache<Int, Int>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, Int>()),
+        anyCache(NSCacheWrapper<Int, Int>()),
+    ])
+    func testRemoveAll(cache: any AnyCache<Int, Int>) {
         // Given
         // -
 
@@ -351,12 +232,13 @@ struct LRUCacheTests {
         #expect(cache[3] == nil)
     }
 
-    @Test
-    func testReferenceCount() {
-        final class MyClass: @unchecked Sendable {}
+    final class MyClass: @unchecked Sendable {}
 
-        let cache = LRUCache<Int, MyClass>()
-
+    @Test(arguments: [
+        anyCache(LRUCacheWrapper<Int, MyClass>()),
+        anyCache(NSCacheWrapper<Int, MyClass>()),
+    ])
+    func testReferenceCount(cache: any AnyCache<Int, MyClass>) {
         // Given
         var ref: MyClass? = MyClass()
         weak var weakRef = ref
@@ -379,26 +261,87 @@ struct LRUCacheTests {
     }
 }
 
+protocol AnyCache<Key, Value>: Sendable {
+    associatedtype Key: Hashable
+    associatedtype Value
+
+    func value(forKey key: Key) -> Value?
+    func setValue(_ value: Value, forKey key: Key, cost: Int)
+    func removeValue(forKey key: Key)
+    func removeAllValues()
+
+    var totalCostLimit: Int { get nonmutating set }
+    var countLimit: Int { get nonmutating set }
+
+    subscript(_ key: Key, cost cost: Int) -> Value? { get nonmutating set }
+}
+
+extension AnyCache {
+    func setValue(_ value: Value, forKey key: Key) {
+        setValue(value, forKey: key, cost: 0)
+    }
+
+    subscript(_ key: Key, cost cost: Int = 0) -> Value? {
+        get {
+            value(forKey: key)
+        }
+        nonmutating set {
+            if let newValue {
+                setValue(newValue, forKey: key, cost: cost)
+            } else {
+                removeValue(forKey: key)
+            }
+        }
+    }
+}
+
 // MARK: - private
-private final class NSCacheWrapper<Key: Hashable, Object> {
-    func object(forKey key: Key) -> Object? {
-        inner.object(forKey: .init(key))?.object
+private final class LRUCacheWrapper<Key: Hashable & Sendable, Value: Sendable>: AnyCache {
+    func value(forKey key: Key) -> Value? {
+        inner.value(forKey: key)
     }
 
-    func setObject(_ obj: Object, forKey key: Key, cost: Int = 0) {
-        inner.setObject(.init(obj), forKey: .init(key), cost: cost)
+    func setValue(_ value: Value, forKey key: Key, cost: Int = 0) {
+        inner.setValue(value, forKey: key, cost: cost)
     }
 
-    func removeObject(forKey key: Key) {
-        inner.removeObject(forKey: .init(key))
-    }
-
-    func removeAllObjects() {
-        inner.removeAllObjects()
+    func removeValue(forKey key: Key) {
+        inner.removeValue(forKey: key)
     }
 
     func removeAllValues() {
-        removeAllObjects()
+        inner.removeAllValues()
+    }
+
+    var totalCostLimit: Int {
+        get { inner.totalCostLimit }
+        set { inner.totalCostLimit = newValue }
+    }
+
+    var countLimit: Int {
+        get { inner.countLimit }
+        set { inner.countLimit = newValue }
+    }
+
+    // MARK: -
+    private let inner = LRUCache<Key, Value>()
+}
+
+private final class NSCacheWrapper<Key: Hashable, Value>: AnyCache, @unchecked Sendable {
+    func value(forKey key: Key) -> Value? {
+        inner.object(forKey: .init(key))?.object
+    }
+
+    func setValue(_ value: Value, forKey key: Key, cost: Int = 0) {
+        inner.setObject(.init(value), forKey: .init(key), cost: cost)
+    }
+
+    func removeValue(forKey key: Key) {
+        inner.removeObject(forKey: .init(key))
+    }
+
+    func removeAllValues() {
+        inner.removeAllObjects()
     }
 
     var totalCostLimit: Int {
@@ -433,25 +376,10 @@ private final class NSCacheWrapper<Key: Hashable, Object> {
     }
 
     private final class ObjectWrapper: NSObject {
-        let object: Object
+        let object: Value
 
-        init(_ object: Object) {
+        init(_ object: Value) {
             self.object = object
-        }
-    }
-}
-
-extension NSCacheWrapper {
-    subscript(_ key: Key, cost cost: Int = 0) -> Object? {
-        get {
-            object(forKey: key)
-        }
-        set {
-            if let newValue {
-                setObject(newValue, forKey: key, cost: cost)
-            } else {
-                removeObject(forKey: key)
-            }
         }
     }
 }
