@@ -4,7 +4,7 @@ public protocol Caching<Key, Value>: Actor {
     associatedtype Key: Hashable & Sendable
     associatedtype Value
 
-    subscript (key: Key) -> Value? { get async throws }
+    subscript(key: Key) -> Value? { get async throws }
 
     func value(for key: Key) async throws -> Value?
 

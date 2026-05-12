@@ -9,7 +9,7 @@ public actor MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching {
     private let lruCache = LRUCache<Key, Value>()
     private var queueingTask: Task<Void, Never>?
 
-    public subscript (key: Key) -> Value? {
+    public subscript(key: Key) -> Value? {
         get async {
             await value(for: key)
         }

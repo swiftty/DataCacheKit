@@ -17,7 +17,7 @@ extension DiskCache {
             self.init(
                 sizeLimit: 150 * 1024 * 1024,
                 filename: defaultFilename(for:),
-                path: path
+                path: path,
             )
         }
 
@@ -25,7 +25,7 @@ extension DiskCache {
             sizeLimit: Int,
             filename: @escaping @Sendable (Key) -> String?,
             path: Path,
-            expirationTimeout: TimeInterval? = nil
+            expirationTimeout: TimeInterval? = nil,
         ) {
             self.sizeLimit = sizeLimit
             self.filename = filename

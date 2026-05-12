@@ -52,7 +52,7 @@ public struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Se
 }
 
 extension LRUCache {
-    public subscript (_ key: Key, cost cost: Int = 0) -> Value? {
+    public subscript(_ key: Key, cost cost: Int = 0) -> Value? {
         get {
             value(forKey: key)
         }

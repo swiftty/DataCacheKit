@@ -17,7 +17,7 @@ extension MemoryCache {
 extension MemoryCache.Options where Value == Data {
     public init(
         countLimit: Int,
-        sizeLimit: Int
+        sizeLimit: Int,
     ) {
         self.countLimit = countLimit
         self.sizeLimit = sizeLimit

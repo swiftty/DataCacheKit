@@ -442,7 +442,7 @@ private final class NSCacheWrapper<Key: Hashable, Object> {
 }
 
 extension NSCacheWrapper {
-    subscript (_ key: Key, cost cost: Int = 0) -> Object? {
+    subscript(_ key: Key, cost cost: Int = 0) -> Object? {
         get {
             object(forKey: key)
         }

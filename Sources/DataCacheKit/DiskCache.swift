@@ -14,17 +14,17 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     public nonisolated let options: Options
     public nonisolated let logger: Logger
 
-    public subscript (key: Key) -> Data? {
+    public subscript(key: Key) -> Data? {
         get async throws {
             try await value(for: key)
         }
-//        set {
-//            if let newValue {
-//                storeData(newValue, for: key)
-//            } else {
-//                removeData(for: key)
-//            }
-//        }
+        //        set {
+        //            if let newValue {
+        //                storeData(newValue, for: key)
+        //            } else {
+        //                removeData(for: key)
+        //            }
+        //        }
     }
 
     private let clock: any Clock<Duration>
@@ -117,7 +117,6 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
         return try await task.value
     }
 
-
     @discardableResult
     public nonisolated func store(_ value: Value, for key: Key) -> Task<Void, Never> {
         return Task {
@@ -178,7 +177,8 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
         let dir: URL?
         switch options.path {
         case .default(let name):
-            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(
+                name)
 
         case .custom(let url):
             dir = url
@@ -298,7 +298,8 @@ extension DiskCache {
                 switch change.operation {
                 case .add(let data):
                     if case let dir = url.deletingLastPathComponent(),
-                       !FileManager.default.fileExists(atPath: dir.path) {
+                        !FileManager.default.fileExists(atPath: dir.path)
+                    {
                         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                     }
 
@@ -376,10 +377,13 @@ extension DiskCache {
             do {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
-                logger.debug("\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
+                logger.debug(
+                    "\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)"
+                )
                 return true
             } catch {
-                logger.error("\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
+                logger.error(
+                    "\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
                 return false
             }
         }
@@ -500,7 +504,7 @@ struct Staging<Key: Hashable & Sendable> {
     mutating func remove(for key: Key) {
         let change = Change(key: key, id: changeID.nextID(), operation: .remove)
         if checkConflicts(on: key) {
-            stages.append(Stage(id: stageID.nextID(),changes: [key: change]))
+            stages.append(Stage(id: stageID.nextID(), changes: [key: change]))
         } else {
             stages[stages.count - 1].changes[key] = change
         }
@@ -520,7 +524,8 @@ struct Staging<Key: Hashable & Sendable> {
         stages.append(stage)
     }
 
-    mutating func flushed(id: Int, changes: [Change], with logger: Logger, logKey: @autoclosure @escaping () -> String) {
+    mutating func flushed(id: Int, changes: [Change], with logger: Logger, logKey: @autoclosure @escaping () -> String)
+    {
         guard case (let i, var stage)? = stages.enumerated().first(where: { $1.id == id }) else {
             assert(changes.isEmpty)
             return

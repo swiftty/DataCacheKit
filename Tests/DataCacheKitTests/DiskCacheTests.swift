@@ -2,7 +2,9 @@ import Testing
 import Foundation
 @testable import DataCacheKit
 
-func yield(until condition: @autoclosure () async -> Bool, message: @autoclosure () -> String? = nil, limit: Int = 10000) async throws {
+func yield(
+    until condition: @autoclosure () async -> Bool, message: @autoclosure () -> String? = nil, limit: Int = 10000,
+) async throws {
     var limit = limit
     while limit > 0 {
         limit -= 1
