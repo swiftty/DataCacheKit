@@ -1,5 +1,5 @@
 import Foundation
-import OSLog
+public import OSLog
 import LRUCache
 
 public actor MemoryCache<Key: Hashable & Sendable, Value: Sendable>: Caching {

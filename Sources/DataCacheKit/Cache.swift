@@ -1,5 +1,5 @@
 import Foundation
-import OSLog
+public import OSLog
 
 public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching {
     public struct Options: Sendable {

@@ -3,8 +3,8 @@
 // This implementation is based on kean/Nuke's DataCache
 // https://github.com/kean/Nuke/blob/master/Sources/Core/Caching/DataCache.swift
 
-import Foundation
-import OSLog
+public import Foundation
+public import OSLog
 
 // MARK: - DiskCache
 public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {

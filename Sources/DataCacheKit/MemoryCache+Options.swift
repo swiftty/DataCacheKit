@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 extension MemoryCache {
     public struct Options: Sendable {
