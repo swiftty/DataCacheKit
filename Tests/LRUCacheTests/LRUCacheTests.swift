@@ -241,7 +241,7 @@ struct LRUCacheTests {
     func testReferenceCount(cache: any AnyCache<Int, MyClass>) {
         // Given
         var ref: MyClass? = MyClass()
-        weak var weakRef = ref
+        weak let weakRef = ref
 
         // When
         autoreleasepool {
