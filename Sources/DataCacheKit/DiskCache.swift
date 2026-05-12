@@ -42,11 +42,11 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
 
     private(set) lazy var staging = Staging<Key>()
 
-    private var runningTasks: [Key: Task<Void, Error>] = [:]
+    private var runningTasks: [Key: Task<Void, any Error>] = [:]
 
-    private(set) var flushingTask: Task<Void, Error>?
+    private(set) var flushingTask: Task<Void, any Error>?
 
-    private(set) var sweepingTask: Task<Void, Error>?
+    private(set) var sweepingTask: Task<Void, any Error>?
 
     private(set) var isFlushNeeded = false
 
@@ -77,7 +77,7 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     func value(for key: Key, with now: Date) async throws -> Data? {
         await Task.yield()
 
-        let task = Task<Data?, Error> {
+        let task = Task<Data?, any Error> {
             _ = await queueingTask?.result
 
             for stage in staging.stages.reversed() {
@@ -96,7 +96,7 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
 
             await waitForTask(for: key)
 
-            let task = Task<Data?, Error>.detached {
+            let task = Task<Data?, any Error>.detached {
                 do {
                     let data = try Data(contentsOf: url)
 
@@ -228,7 +228,7 @@ extension DiskCache {
         }
     }
 
-    private func flushIfNeeded(_ oldTask: Task<Void, Error>?) async throws {
+    private func flushIfNeeded(_ oldTask: Task<Void, any Error>?) async throws {
         guard !isFlushScheduled else { return }
         isFlushScheduled = true
         defer { isFlushScheduled = false }
@@ -292,7 +292,7 @@ extension DiskCache {
         }
     }
 
-    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, Error> {
+    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, any Error> {
         let task = Task {
             do {
                 switch change.operation {
@@ -325,7 +325,7 @@ extension DiskCache {
         return task
     }
 
-    private func performChangeRemoveAll(for changes: some Collection<Staging<Key>.Change>) -> Task<Void, Error> {
+    private func performChangeRemoveAll(for changes: some Collection<Staging<Key>.Change>) -> Task<Void, any Error> {
         let task = Task {
             do {
                 let dir = try path
