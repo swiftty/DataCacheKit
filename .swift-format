@@ -1,0 +1,12 @@
+{
+  "indentation": {
+    "spaces": 4
+  },
+  "lineLength": 120,
+  "multilineTrailingCommaBehavior": "alwaysUsed",
+  "multiElementCollectionTrailingCommas": false,
+  "rules": {
+    "NoAccessLevelOnExtensionDeclaration": false
+  },
+  "version": 1
+}

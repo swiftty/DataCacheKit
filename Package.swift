@@ -17,7 +17,12 @@ let package = Package(
             name: "DataCacheKit",
             targets: ["DataCacheKit"]),
     ],
-    dependencies: [],
+    dependencies: [
+        // .package(url: "https://github.com/swiftty/swift-project-starter.git", from: "0.2.0"),
+        // AUTO GENERATED ↓: swift-project-starter: deps
+        .package(url: "https://github.com/swiftty/swift-format-plugin", from: "1.0.0")
+        // AUTO GENERATED ↑: swift-project-starter: deps
+    ],
     targets: [
         .target(
             name: "DataCacheKit",
@@ -34,3 +39,33 @@ let package = Package(
             dependencies: ["LRUCache"]),
     ]
 )
+
+// AUTO GENERATED ↓: swift-project-starter: settings
+for target in package.targets {
+    if [.executable, .test, .regular].contains(target.type) {
+        do {
+            var swiftSettings = target.swiftSettings ?? []
+            defer {
+                target.swiftSettings = swiftSettings
+            }
+            swiftSettings += [
+                .enableUpcomingFeature("InternalImportsByDefault"),
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+                .enableUpcomingFeature("MemberImportVisibility"),
+                .enableUpcomingFeature("InferIsolatedConformances"),
+                .enableUpcomingFeature("ImmutableWeakCaptures"),
+                .enableUpcomingFeature("ExistentialAny")
+            ]
+        }
+        do {
+            var plugins = target.plugins ?? []
+            defer {
+                target.plugins = plugins
+            }
+            plugins += [
+                .plugin(name: "Lint", package: "swift-format-plugin")
+            ]
+        }
+    }
+}
+// AUTO GENERATED ↑: swift-project-starter: settings

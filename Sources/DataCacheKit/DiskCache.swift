@@ -3,8 +3,8 @@
 // This implementation is based on kean/Nuke's DataCache
 // https://github.com/kean/Nuke/blob/master/Sources/Core/Caching/DataCache.swift
 
-import Foundation
-import OSLog
+public import Foundation
+public import OSLog
 
 // MARK: - DiskCache
 public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
@@ -14,17 +14,17 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     public nonisolated let options: Options
     public nonisolated let logger: Logger
 
-    public subscript (key: Key) -> Data? {
+    public subscript(key: Key) -> Data? {
         get async throws {
             try await value(for: key)
         }
-//        set {
-//            if let newValue {
-//                storeData(newValue, for: key)
-//            } else {
-//                removeData(for: key)
-//            }
-//        }
+        //        set {
+        //            if let newValue {
+        //                storeData(newValue, for: key)
+        //            } else {
+        //                removeData(for: key)
+        //            }
+        //        }
     }
 
     private let clock: any Clock<Duration>
@@ -42,11 +42,11 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
 
     private(set) lazy var staging = Staging<Key>()
 
-    private var runningTasks: [Key: Task<Void, Error>] = [:]
+    private var runningTasks: [Key: Task<Void, any Error>] = [:]
 
-    private(set) var flushingTask: Task<Void, Error>?
+    private(set) var flushingTask: Task<Void, any Error>?
 
-    private(set) var sweepingTask: Task<Void, Error>?
+    private(set) var sweepingTask: Task<Void, any Error>?
 
     private(set) var isFlushNeeded = false
 
@@ -77,7 +77,7 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
     func value(for key: Key, with now: Date) async throws -> Data? {
         await Task.yield()
 
-        let task = Task<Data?, Error> {
+        let task = Task<Data?, any Error> {
             _ = await queueingTask?.result
 
             for stage in staging.stages.reversed() {
@@ -96,7 +96,7 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
 
             await waitForTask(for: key)
 
-            let task = Task<Data?, Error>.detached {
+            let task = Task<Data?, any Error>.detached {
                 do {
                     let data = try Data(contentsOf: url)
 
@@ -116,7 +116,6 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
         }
         return try await task.value
     }
-
 
     @discardableResult
     public nonisolated func store(_ value: Value, for key: Key) -> Task<Void, Never> {
@@ -178,7 +177,8 @@ public actor DiskCache<Key: Hashable & Sendable>: Caching, @unchecked Sendable {
         let dir: URL?
         switch options.path {
         case .default(let name):
-            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+            dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(
+                name)
 
         case .custom(let url):
             dir = url
@@ -228,7 +228,7 @@ extension DiskCache {
         }
     }
 
-    private func flushIfNeeded(_ oldTask: Task<Void, Error>?) async throws {
+    private func flushIfNeeded(_ oldTask: Task<Void, any Error>?) async throws {
         guard !isFlushScheduled else { return }
         isFlushScheduled = true
         defer { isFlushScheduled = false }
@@ -292,13 +292,14 @@ extension DiskCache {
         }
     }
 
-    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, Error> {
+    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, any Error> {
         let task = Task {
             do {
                 switch change.operation {
                 case .add(let data):
                     if case let dir = url.deletingLastPathComponent(),
-                       !FileManager.default.fileExists(atPath: dir.path) {
+                        !FileManager.default.fileExists(atPath: dir.path)
+                    {
                         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                     }
 
@@ -324,7 +325,7 @@ extension DiskCache {
         return task
     }
 
-    private func performChangeRemoveAll(for changes: some Collection<Staging<Key>.Change>) -> Task<Void, Error> {
+    private func performChangeRemoveAll(for changes: some Collection<Staging<Key>.Change>) -> Task<Void, any Error> {
         let task = Task {
             do {
                 let dir = try path
@@ -376,10 +377,13 @@ extension DiskCache {
             do {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
-                logger.debug("\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)")
+                logger.debug(
+                    "\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)"
+                )
                 return true
             } catch {
-                logger.error("\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
+                logger.error(
+                    "\(self.logKey)sweep item: \(item.url.lastPathComponent), error: \(String(describing: error))")
                 return false
             }
         }
@@ -500,7 +504,7 @@ struct Staging<Key: Hashable & Sendable> {
     mutating func remove(for key: Key) {
         let change = Change(key: key, id: changeID.nextID(), operation: .remove)
         if checkConflicts(on: key) {
-            stages.append(Stage(id: stageID.nextID(),changes: [key: change]))
+            stages.append(Stage(id: stageID.nextID(), changes: [key: change]))
         } else {
             stages[stages.count - 1].changes[key] = change
         }
@@ -520,7 +524,8 @@ struct Staging<Key: Hashable & Sendable> {
         stages.append(stage)
     }
 
-    mutating func flushed(id: Int, changes: [Change], with logger: Logger, logKey: @autoclosure @escaping () -> String) {
+    mutating func flushed(id: Int, changes: [Change], with logger: Logger, logKey: @autoclosure @escaping () -> String)
+    {
         guard case (let i, var stage)? = stages.enumerated().first(where: { $1.id == id }) else {
             assert(changes.isEmpty)
             return

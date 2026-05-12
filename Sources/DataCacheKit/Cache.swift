@@ -1,5 +1,5 @@
 import Foundation
-import OSLog
+public import OSLog
 
 public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching {
     public struct Options: Sendable {
@@ -15,7 +15,7 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     public nonisolated let options: Options
     public nonisolated let logger: Logger
 
-    public subscript (key: Key) -> Value? {
+    public subscript(key: Key) -> Value? {
         get async throws {
             try await value(for: key)
         }
