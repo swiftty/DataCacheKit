@@ -12,7 +12,7 @@ public struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Se
         nonmutating set { entries.withLock { $0.countLimit = newValue } }
     }
 
-    private let entries = OSAllocatedUnfairLock<Entiries>(initialState: .init())
+    private let entries = OSAllocatedUnfairLock<Entries>(initialState: .init())
 
     public init() {}
 
@@ -45,8 +45,8 @@ public struct LRUCache<Key: Hashable & Sendable, Value: Sendable>: ~Copyable, Se
     }
 
     public func removeAllValues() {
-        entries.withLock { entiries in
-            entiries.removeAll()
+        entries.withLock { entries in
+            entries.removeAll()
         }
     }
 }
@@ -83,7 +83,7 @@ private extension LRUCache {
         }
     }
 
-    struct Entiries: Sendable {
+    struct Entries: Sendable {
         var values: [Key: CacheEntry] = [:]
         var totalCost = 0
         var totalCostLimit = 0

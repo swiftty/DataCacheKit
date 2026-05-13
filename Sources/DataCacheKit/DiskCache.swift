@@ -272,7 +272,7 @@ extension DiskCache {
                         group.addTask { [change] }
                         continue
                     }
-                    let task = peformChange(change, with: url)
+                    let task = performChange(change, with: url)
                     group.addTask {
                         do {
                             try await task.value
@@ -292,7 +292,7 @@ extension DiskCache {
         }
     }
 
-    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, any Error> {
+    private func performChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, any Error> {
         let task = Task {
             do {
                 switch change.operation {
@@ -378,7 +378,7 @@ extension DiskCache {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
                 logger.debug(
-                    "\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)"
+                    "\(self.logKey)swept item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)"
                 )
                 return true
             } catch {
