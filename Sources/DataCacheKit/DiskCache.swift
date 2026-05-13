@@ -378,7 +378,7 @@ extension DiskCache {
                 try FileManager.default.removeItem(at: item.url)
                 size -= item.meta.totalFileAllocatedSize ?? 0
                 logger.debug(
-                    "\(self.logKey)sweeped item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)"
+                    "\(self.logKey)swept item: \(item.url.lastPathComponent), size: \(item.meta.totalFileAllocatedSize ?? 0)"
                 )
                 return true
             } catch {
