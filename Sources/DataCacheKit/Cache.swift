@@ -21,13 +21,13 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
         }
     }
 
-    private let onMemery: MemoryCache<Key, Value>
+    private let onMemory: MemoryCache<Key, Value>
     private let onDisk: DiskCache<Key>
 
     private var queueingTask: Task<Void, Never>?
 
     public init(options: Options, logger: Logger = .init(.disabled)) {
-        self.onMemery = .init(options: options.forMemory, logger: logger)
+        self.onMemory = .init(options: options.forMemory, logger: logger)
         self.onDisk = .init(options: options.forDisk, logger: logger)
         self.options = options
         self.logger = logger
@@ -40,7 +40,7 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     public func value(for key: Key) async throws -> Value? {
         _ = await queueingTask?.result
 
-        if let value = await onMemery.value(for: key) {
+        if let value = await onMemory.value(for: key) {
             return value
         }
 
@@ -53,7 +53,7 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
             return try decoder.decode(Value.self, from: data)
         }()
 
-        await onMemery.store(value, for: key).value
+        await onMemory.store(value, for: key).value
         return value
     }
 
@@ -68,7 +68,7 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     private func _store(_ value: Value, for key: Key) -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
-            async let memory: Void = await onMemery.store(value, for: key).value
+            async let memory: Void = await onMemory.store(value, for: key).value
             async let disk: Void = await _storeToDisk(value, for: key)
 
             await memory
@@ -87,7 +87,7 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     private func _remove(for key: Key) -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
-            async let memory: Void = await onMemery.remove(for: key).value
+            async let memory: Void = await onMemory.remove(for: key).value
             async let disk: Void = await onDisk.remove(for: key).value
 
             await memory
@@ -106,7 +106,7 @@ public actor Cache<Key: Hashable & Sendable, Value: Codable & Sendable>: Caching
     private func _removeAll() -> Task<Void, Never> {
         queueingTask.enqueueAndReplacing { [weak self] in
             guard let self else { return }
-            async let memory: Void = await onMemery.removeAll().value
+            async let memory: Void = await onMemory.removeAll().value
             async let disk: Void = await onDisk.removeAll().value
 
             await memory

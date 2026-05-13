@@ -272,7 +272,7 @@ extension DiskCache {
                         group.addTask { [change] }
                         continue
                     }
-                    let task = peformChange(change, with: url)
+                    let task = performChange(change, with: url)
                     group.addTask {
                         do {
                             try await task.value
@@ -292,7 +292,7 @@ extension DiskCache {
         }
     }
 
-    private func peformChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, any Error> {
+    private func performChange(_ change: Staging<Key>.Change, with url: URL) -> Task<Void, any Error> {
         let task = Task {
             do {
                 switch change.operation {
