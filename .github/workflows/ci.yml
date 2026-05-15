@@ -12,6 +12,7 @@ jobs:
     runs-on: macos-26
     strategy:
       matrix:
+        # renovate-xcodereleases: runs-on=macos-26
         xcode: ["26.4.1"]
     steps:
       - uses: maxim-lobanov/setup-xcode@v1
