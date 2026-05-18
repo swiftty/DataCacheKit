@@ -3,6 +3,6 @@
   "extends": [
     "config:recommended",
     "github>swiftty/renovate-config#v0.0.1",
-    "github>swiftty/renovate-xcodereleases#v0.0.1"
+    "github>swiftty/renovate-xcodereleases#v0.0.2"
   ]
 }
