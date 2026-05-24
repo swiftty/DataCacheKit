@@ -43,29 +43,17 @@ let package = Package(
 // AUTO GENERATED ↓: swift-project-starter: settings
 for target in package.targets {
     if [.executable, .test, .regular].contains(target.type) {
-        do {
-            var swiftSettings = target.swiftSettings ?? []
-            defer {
-                target.swiftSettings = swiftSettings
-            }
-            swiftSettings += [
-                .enableUpcomingFeature("InternalImportsByDefault"),
-                .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
-                .enableUpcomingFeature("MemberImportVisibility"),
-                .enableUpcomingFeature("InferIsolatedConformances"),
-                .enableUpcomingFeature("ImmutableWeakCaptures"),
-                .enableUpcomingFeature("ExistentialAny")
-            ]
-        }
-        do {
-            var plugins = target.plugins ?? []
-            defer {
-                target.plugins = plugins
-            }
-            plugins += [
-                .plugin(name: "Lint", package: "swift-format-plugin")
-            ]
-        }
+        target.swiftSettings = (target.swiftSettings ?? []) + [
+            .enableUpcomingFeature("InternalImportsByDefault"),
+            .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+            .enableUpcomingFeature("MemberImportVisibility"),
+            .enableUpcomingFeature("InferIsolatedConformances"),
+            .enableUpcomingFeature("ImmutableWeakCaptures"),
+            .enableUpcomingFeature("ExistentialAny")
+        ]
+        target.plugins = (target.plugins ?? []) + [
+            .plugin(name: "Lint", package: "swift-format-plugin")
+        ]
     }
 }
 // AUTO GENERATED ↑: swift-project-starter: settings
